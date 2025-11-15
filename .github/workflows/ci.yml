@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+      fail-fast: false
+    defaults:
+      run:
+        shell: bash -l {0}
+    name: ${{ matrix.os }} py ${{ matrix.python-version }} tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: mpnn
+          channels: conda-forge,defaults
+          use-mamba: true
+
+      - name: Install uv
+        run: |
+          pip install uv
+
+      - name: Install package and dependencies
+        run: |
+          uv pip install -e .[dev,mypy]
+
+      - name: Check style
+        run: |
+          pre-commit run --all-files
+
+      - name: Run pytest
+        run: |
+          pytest -n $(nproc || echo 1) --dist=loadscope
