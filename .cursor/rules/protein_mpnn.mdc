@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+
+# Cursor Rules
+
+## Environment
+
+- Work inside the shared conda env: `conda activate mpnn` (Python >= 3.12). GPU workflows assume CUDA 12 capable drivers.
+- **Make sure the conda environment `mpnn` is activated before you run ANY commands!**
