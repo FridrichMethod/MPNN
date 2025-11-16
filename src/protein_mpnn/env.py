@@ -1,10 +1,15 @@
+import atexit
 import os
 import subprocess
+from contextlib import ExitStack
 from importlib.resources import as_file, files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from protein_mpnn.utils import norm_path
+
+_PACKAGE_ROOT_DIR_EXIT_STACK = ExitStack()
+atexit.register(_PACKAGE_ROOT_DIR_EXIT_STACK.close)
 
 
 def _detect_project_root_dir() -> Path:
@@ -37,14 +42,21 @@ def _detect_project_root_dir() -> Path:
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         pass
 
-    return here.parents[2]
+    return here.parents[min(2, len(here.parents) - 1)]
 
 
 def _detect_package_root_dir() -> Path:
     """Return a real filesystem path to the package root (zip-safe)."""
     root: Traversable = files(__package__)
-    with as_file(root) as p:
-        return Path(p)
+    if isinstance(root, Path):
+        return root
+    if isinstance(root, (str, os.PathLike)):
+        return norm_path(os.fspath(root))
+
+    # Falls back to extracting resources (zip-safe). Keep the context alive
+    # for the lifetime of the interpreter so the returned path remains valid.
+    extracted_path = _PACKAGE_ROOT_DIR_EXIT_STACK.enter_context(as_file(root))
+    return Path(extracted_path)
 
 
 PROJECT_ROOT_DIR = _detect_project_root_dir()
