@@ -98,59 +98,36 @@ Zhaoyang Li \\
 
 % \end{abstract}
 
+\section{Training}
 
-\section{Motivation}
+We construct the pre-training dataset from the Protein Data Bank (PDB). We discard PDB entries with a resolution worse than \SI{3.5}{\angstrom} and repair the remaining structures. Multimeric complexes are split into individual chains. Following the original ProteinMPNN data preprocessing pipeline, we further cluster sequences by sequence identity.
 
-Inverse protein folding (protein sequence design) seeks a sequence that folds to a given backbone. This is a central challenge in protein engineering, with applications ranging from enzyme design to vaccine development. Modern deep learning models like ProteinMPNN~\cite{Dauparas2022} have achieved breakthrough performance on this task, substantially outperforming traditional physics-based methods (e.g. Rosetta) in native sequence recovery (52.4\% vs 32.9\% for ProteinMPNN vs. Rosetta).
+We adapt the ProteinMPNN implementation in PyG and modify the dataloader so that, in each epoch, PDB files are sampled randomly at the level of clusters, without sampling from the same cluster more than once. The model is trained on a single H100 GPU. The training and validation curves are shown in Figure~\ref{fig:training_curves}.
 
-Beside its success on protein sequence design, recent studies also revealed that the log-likelihood predicted by the model is highly correlated with the free energy of the folded protein, and there is an opportunity to inject more physical context into the model. In particular, side-chain packing and solvent exposure that strongly influence protein stability and binding are not explicitly modeled by using only backbone atoms. We propose to extend graph-based protein design models with more physically meaningful structural features to improve generalization to stability and binding tasks. Our project will improve a ProteinMPNN-style model that leverages side-chain geometry, improved neighbor definitions, and occupancy (burial) features. We will evaluate it on inverse folding as well as (zero-shot) free energy prediction using large-scale experimental datasets. Ultimately, our goal is to create a GNN-based model that not only excels at the core sequence design task, but also generalizes to predict experimental measures of stability and protein-protein interaction strength.
-
-\section{Datasets and Tasks}
-
-We will pre-train the model on the Protein Data Bank (PDB) dataset~\cite{Berman2000} as what is done in ProteinMPNN~\cite{Dauparas2022} (and other inverse folding models like ESM-IF1~\cite{Hsu2022}), and then fine-tune it on the two public datasets to benchmark the model's performance on stability and binding generalization. We will use the official architecture and training recipe as a strong starting point.
-
-\begin{enumerate}[leftmargin=1.2em,itemsep=0.2em,topsep=0.1em]
-  \item MegaScale stability dataset: a ``mega-scale'' experimental dataset of protein folding stabilities~\cite{Tsuboyama2023}. This dataset contains 1.84 million measurements of folding free energy ($\Delta G$) or stability changes ($\Delta\Delta G$) across $10^3$ diverse proteins. We will primarily use the high-quality single-mutation subset (776k data points) for quantitative evaluation. We will use the public release on Hugging Face~\cite{MegaScaleHF}.
-
-  \item SKEMPI v2.0 binding affinity dataset: a comprehensive database of mutations in protein–protein interfaces with measured binding free energy changes~\cite{Jankauskaite2019,SKEMPIweb}. SKEMPI v2.0 includes 7,085 mutations (single and multiple) in various complexes. We will focus on single-point mutations (over 4,000 entries after quality filtering), using the reported $\Delta\Delta G$ as ground truth for binding affinity change.
-
-\end{enumerate}
-
-Using these datasets, we plan to evaluate our model on three fronts: (i) \emph{Sequence recovery} (\%), (ii) \emph{Stability prediction}: Pearson $r$ and RMSE between model-derived scores and experimental $\Delta\Delta G$ on MegaScale, and (iii) \emph{Binding affinity prediction}: RMSE (kcal/mol) and rank correlations for SKEMPI $\Delta\Delta G$.
-
-\section{Models and Methods}
-
-Protein energetics is driven by geometry-dependent, many-body interactions (packing, burial, and side-chain orientations). Distance-cutoff graphs, virtual-center features~\cite{vanKempen2024}, and exposure encodings directly reflect these determinants, while equivariant GNNs~\cite{Jing2021,Satorras2021} align with the $\mathrm{SE}(3)$ symmetries of structure.
-
-Given a protein backbone graph $G=(V,E)$ with residue nodes $i\in V$ and geometry-derived edge features, learn $p_\theta(\mathbf{a}\mid G)$ over sequences $\mathbf{a}=(a_1,\dots,a_{\abs{V}})$. Evaluation also uses zero-shot scoring: for a structure and mutant at site $k$, define a sequence score $s_\theta(\mathbf{a}\mid G)$ (e.g., $\log p_\theta$ or an energy head); correlate $\Delta s_\theta$ for WT$\rightarrow$mutant with experimental $\Delta\Delta G$.
-
-\textbf{Baseline.} ProteinMPNN~\cite{Dauparas2022}, a message-passing neural network implemented in PyTorch Geometric (PyG)~\cite{Fey2019}. ThermoMPNN (ProteinMPNN features $\rightarrow$ $\Delta\Delta G$ via transfer learning)~\cite{Dieckhaus2024} for stability prediction.
-
-\textbf{Physics-informed extensions (novelty).}
-ProteinMPNN originally used backbone distances and orientations (pairwise $C_\alpha$ distances, frame angles, etc.) as input features. We will incorporate additional features to augment this representation:
-\begin{enumerate}[leftmargin=1.2em,itemsep=0.2em,topsep=0.1em]
-  \item \textbf{Connectivity by distance cutoff.} Replace fixed $k$-NN with edges for residue pairs whose $C_\alpha$ distance is below a threshold (e.g., $d_c\in[8,10]$ \si{\angstrom}). This matches the biophysical notion that interaction strength decays with Euclidean distance and yields degree heterogeneity consistent with core vs.\ surface residues.
-  \item \textbf{Side-chain virtual centers.} Augment nodes with a side-chain virtual center $V$ constructed from backbone geometry as in Foldseek~\cite{vanKempen2024}. Virtual centers are defined by angle $\theta(V-C_\alpha-C_\beta)$, dihedral $\tau(V-C_\alpha-C_\beta-N)$, and length $l=\lvert V-C_\alpha\rvert$; the optimal parameters are $\theta=270^\circ$ ($3\pi/2$), $\tau=0^\circ$, $l=2\times 1.53$ \si{\angstrom}. We add edges/features using $V$--$V$ and $(C_\alpha,V)$ distances to inform side-chain packing.
-  \item \textbf{Occupancy (solvent exposure).} Define a differentiable occupancy for node $i$:
-        \begin{equation}
-          \mathrm{Occ}(i)=\sum_{j\neq i,\; d_{ij}<r} w_j\exp\left(-\frac{d_{ij}^2}{2\sigma^2}\right),\quad
-          S(i)=\frac{\mathrm{Occ}(i)-\mathrm{Occ}_{\min}(t_i)}{\mathrm{Occ}_{\max}(t_i)-\mathrm{Occ}_{\min}(t_i)},
-        \end{equation}
-        where $d_{ij}$ are $V$--$V$ distances, $t_i$ is residue type, and $w_j$ are per-residue weights (e.g., approximate side-chain volumes). $S(i)$ encodes burial vs.\ exposure to guide hydrophobic/polar preferences.
-\end{enumerate}
-
-\textbf{Architectural exploration.} In addition to the ProteinMPNN message-passing encoder, we may evaluate (i) GVP-GNN layers that pair scalar/vector features with rotation-aware updates~\cite{Jing2021}, and (ii) EGNN layers providing $\mathrm{E}(n)$-equivariance with lightweight coordinate updates~\cite{Satorras2021}. We will keep the order-agnostic autoregressive decoder of ProteinMPNN~\cite{Dauparas2022}, optionally conditioning it on the proposed features.
-
-\begin{figure}[h]
+\begin{figure}[!ht]
   \centering
-  \includegraphics[width=\linewidth]{figures/protein_mpnn_architecture.jpg}
-  \caption{ProteinMPNN architecture (encoder--decoder). Adapted from~\cite{Dauparas2022}. We extend the encoder with distance-cutoff connectivity, virtual-center side-chain features, and occupancy signals.}
-  \label{fig:protein_mpnn}
+  \includegraphics[width=0.4\linewidth]{figures/train_accuracy.png}
+  \includegraphics[width=0.4\linewidth]{figures/train_perplexity.png}
+  \includegraphics[width=0.4\linewidth]{figures/validation_accuracy.png}
+  \includegraphics[width=0.4\linewidth]{figures/validation_perplexity.png}
+  \caption{Training and validation curves for the pre-training phase.}
+  \label{fig:training_curves}
 \end{figure}
 
-\bibliographystyle{unsrt}
-\bibliography{references}
+\section{Finetuning}
 
+We fine-tune the model on the MegaScale stability dataset. For each mutation, we use the difference in $\Delta\Delta G$ between the wild-type and mutant sequence as the target value. Fine-tuning is performed on a single H100 GPU. The training and validation curves are shown in Figure~\ref{fig:finetuning_curves}.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/megascale_train_loss.png}
+  \includegraphics[width=0.4\linewidth]{figures/megascale_train_pearson.png}
+  \includegraphics[width=0.4\linewidth]{figures/megascale_train_spearman.png}
+  \includegraphics[width=0.4\linewidth]{figures/valid_pearson.png}
+  \includegraphics[width=0.4\linewidth]{figures/valid_spearman.png}
+  \caption{Training and validation curves for the finetuning phase.}
+  \label{fig:finetuning_curves}
+\end{figure}
 
 % \section{Submission of papers to NeurIPS 2022}
 
