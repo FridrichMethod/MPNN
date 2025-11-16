@@ -42,7 +42,8 @@ jobs:
 
       - name: Check style
         run: |
-          pre-commit run --all-files
+          pre-commit run --all-files --hook-stage pre-commit
+          pre-commit run --all-files --hook-stage pre-push
 
       - name: Run pytest
         run: |
