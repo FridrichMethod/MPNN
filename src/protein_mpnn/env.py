@@ -42,7 +42,12 @@ def _detect_project_root_dir() -> Path:
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         pass
 
-    return here.parents[min(2, len(here.parents) - 1)]
+    assert len(here.parents) >= 2
+
+    if here.parents[1].name == "src":
+        return here.parents[2]
+
+    return here.parents[1]
 
 
 def _detect_package_root_dir() -> Path:
