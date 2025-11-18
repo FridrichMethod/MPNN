@@ -185,6 +185,7 @@ module = [
   "huggingface_hub.*",
   "hydra.*",
   "pyarrow.*",
+  "torch.*",
   "torch_geometric.*",
 ]
 ignore_missing_imports = true
