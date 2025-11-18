@@ -202,17 +202,3 @@ where = ["src"]
 addopts = "-v -s --tb=short --strict-markers --color=yes"
 testpaths = ["tests"]
 env = ["TQDM_DISABLE=1"]
-
-[tool.coverage.run]
-branch = true
-parallel = true
-source = ["protein_mpnn"]
-omit = ["*/tests/*", "*/.venv/*", "*/site-packages/*"]
-
-[tool.coverage.report]
-show_missing = true
-skip_covered = true
-precision = 2
-
-[tool.coverage.html]
-directory = "htmlcov"
