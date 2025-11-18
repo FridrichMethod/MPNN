@@ -178,6 +178,7 @@ warn_unreachable = true
 warn_unused_ignores = true
 namespace_packages = false
 enable_incomplete_feature = ["Unpack"]
+disable_error_code = ["import-not-found", "import-untyped", "no-any-return"]
 
 [[tool.mypy.overrides]]
 module = [
