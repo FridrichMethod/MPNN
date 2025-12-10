@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import shutil
 
-from protein_mpnn import env
+from mpnn import env
 
 
 def test_detect_package_root_dir_preserves_extracted_path(tmp_path, monkeypatch):

@@ -6,7 +6,7 @@ from importlib.resources import as_file, files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from protein_mpnn.utils import norm_path
+from mpnn.utils import norm_path
 
 _PACKAGE_ROOT_DIR_EXIT_STACK = ExitStack()
 atexit.register(_PACKAGE_ROOT_DIR_EXIT_STACK.close)

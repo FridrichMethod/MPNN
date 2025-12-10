@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import tomllib
 
-from protein_mpnn.env import PROJECT_ROOT_DIR
+from mpnn.env import PROJECT_ROOT_DIR
 
 PYPROJECT_PATH = PROJECT_ROOT_DIR / "pyproject.toml"
 

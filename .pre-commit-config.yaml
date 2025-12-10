@@ -11,7 +11,6 @@ repos:
         name: limit number of staged files
         language: system
         pass_filenames: false
-        stages: [pre-commit]
         entry: bash -c '
           n=$(git diff --cached --name-only | wc -l);
           max=50;
@@ -21,13 +20,11 @@ repos:
           fi'
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.5
+    rev: v0.14.8
     hooks:
       - id: ruff-check
         args: [--fix]
-        stages: [pre-commit]
       - id: ruff-format
-        stages: [pre-commit]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2

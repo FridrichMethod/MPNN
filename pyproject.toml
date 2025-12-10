@@ -3,70 +3,73 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ProteinMPNN"
+name = "mpnn"
+description = "CS224W final project"
+# description = "StaBddG / ProteinMPNN stability experiments"
 dynamic = ["version"]
 authors = [
-  { name = "Zhaoyang Li", email = "zhaoyangli@stanford.edu" },
-  { name = "Pengwei Sun", email = "pengwei@stanford.edu" },
+    { name = "Zhaoyang Li", email = "zhaoyangli@stanford.edu" },
+    { name = "Pengwei Sun", email = "pengwei@stanford.edu" },
 ]
+# authors = [{ name = "Arthur Deng", email = "lxdeng@stanford.edu" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-description = "CS224W final project"
 requires-python = ">=3.12"
 dependencies = [
-  "biopython",
-  "datasets==4.0.0", # Sherlock compatability (pyarrow<21.0.0)
-  "huggingface-hub",
-  "hydra-core",
-  "jaxtyping",
-  "jupyter",
-  "matplotlib",
-  "numpy",
-  "pandas",
-  "prody",
-  "pyarrow<21.0.0",  # Sherlock compatability
-  "seaborn",
-  "torch>=2.6.0",    # Sherlock compatability (glibc==2.17)
-  "torch_geometric",
-  "tqdm",
-  "transformers",
-  "typer",
-  "uv",
-  "wandb",
+    "biopython",
+    "datasets==4.0.0", # Sherlock compatability (pyarrow<21.0.0)
+    "huggingface-hub",
+    "hydra-core",
+    "jaxtyping",
+    "jupyter",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "prody",
+    "pyarrow<21.0.0",  # Sherlock compatability
+    "scipy",
+    "seaborn",
+    "torch>=2.6.0",    # Sherlock compatability (glibc==2.17)
+    "torch_geometric",
+    "tqdm",
+    "transformers",
+    "typer",
+    "uv",
+    "wandb",
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "protein_mpnn.__version__" }
+version = { attr = "mpnn.__version__" }
 
 [project.optional-dependencies]
 dev = [
-  "pre-commit",
-  "pytest",
-  "pytest-cov",
-  "pytest-env",
-  "pytest-html",
-  "pytest-timeout",
-  "pytest-xdist",
-  "ruff",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "pytest-env",
+    "pytest-html",
+    "pytest-timeout",
+    "pytest-xdist",
+    "ruff",
 ]
 mypy = [
-  "mypy",
-  "pandas-stubs",
-  "types-PyYAML",
-  "types-aiofiles",
-  "types-cachetools",
-  "types-click",
-  "types-python-dateutil",
-  "types-python-slugify",
-  "types-pytz",
-  "types-redis",
-  "types-requests",
-  "types-seaborn",
-  "types-setuptools",
-  "types-six",
-  "types-tabulate",
-  "types-toml",
-  "types-tqdm",
+    "mypy",
+    "pandas-stubs",
+    "types-PyYAML",
+    "types-aiofiles",
+    "types-cachetools",
+    "types-click",
+    "types-python-dateutil",
+    "types-python-slugify",
+    "types-pytz",
+    "types-redis",
+    "types-requests",
+    "types-seaborn",
+    "types-setuptools",
+    "types-six",
+    "types-tabulate",
+    "types-toml",
+    "types-tqdm",
 ]
 
 [tool.ruff]
@@ -75,78 +78,78 @@ preview = true
 line-length = 100
 src = ["src"]
 extend-exclude = [
-  ".git",
-  ".hg",
-  ".mypy_cache",
-  ".pytest_cache",
-  ".ruff_cache",
-  ".svn",
-  ".tox",
-  ".venv",
-  "_build",
-  "buck-out",
-  "build",
-  "dist",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
 ]
 
 [tool.ruff.lint]
 # Check https://beta.ruff.rs/docs/rules/ for full list of rules
 select = [
-  "E", # pycodestyle
-  # "W",   # pycodestyle
-  "F",   # Pyflakes
-  "C90", # mccabe
-  "I",   # isort
-  # "N",   # pep8-naming
-  # "D",   # pydocstyle
-  "UP", # pyupgrade
-  # "YTT", # flake8-2020
-  # "ANN", # flake8-annotations
-  # "S",   # flake8-bandit
-  # "BLE", # flake8-blind-except
-  # "FBT", # flake8-boolean-trap
-  "B", # flake8-bugbear
-  "A", # flake8-builtins
-  # "COM", # flake8-commas
-  # "C4",  # flake8-comprehensions
-  # "DTZ", # flake8-datetimez
-  # "T10", # flake8-debugger
-  # "DJ",  # flake8-django
-  # "EM",  # flake8-errmsg
-  # "EXE", # flake8-executable
-  # "ISC", # flake8-implicit-str-concat
-  # "ICN", # flake8-import-conventions
-  # "G",   # flake8-logging-format
-  # "INP", # flake8-no-pep420
-  # "PIE", # flake8-pie
-  # "T20", # flake8-print
-  # "PYI", # flake8-pyi
-  # "PT",  # flake8-pytest-style
-  # "Q",   # flake8-quotes
-  # "RSE", # flake8-raise
-  # "RET", # flake8-return
-  # "SLF", # flake8-self
-  "SIM", # flake8-simplify
-  "TID", # flake8-tidy-imports
-  # "TCH", # flake8-type-checking
-  # "ARG", # flake8-unused-arguments
-  # "PTH", # flake8-use-pathlib
-  # "ERA", # eradicate
-  # "PD",  # pandas-vet
-  # "PGH", # pygrep-hooks
-  # "PLC", # pylint-convention
-  "PLE", # pylint-error
-  # "PLR", # pylint-refactor
-  # "PLW", # pylint-warning
-  # "TRY", # tryceratops
-  # "NPY", # numpy
-  "RUF", # ruff
+    "E", # pycodestyle
+    # "W",   # pycodestyle
+    "F",   # Pyflakes
+    "C90", # mccabe
+    "I",   # isort
+    # "N",   # pep8-naming
+    # "D",   # pydocstyle
+    "UP", # pyupgrade
+    # "YTT", # flake8-2020
+    # "ANN", # flake8-annotations
+    # "S",   # flake8-bandit
+    # "BLE", # flake8-blind-except
+    # "FBT", # flake8-boolean-trap
+    "B", # flake8-bugbear
+    "A", # flake8-builtins
+    # "COM", # flake8-commas
+    # "C4",  # flake8-comprehensions
+    # "DTZ", # flake8-datetimez
+    # "T10", # flake8-debugger
+    # "DJ",  # flake8-django
+    # "EM",  # flake8-errmsg
+    # "EXE", # flake8-executable
+    # "ISC", # flake8-implicit-str-concat
+    # "ICN", # flake8-import-conventions
+    # "G",   # flake8-logging-format
+    # "INP", # flake8-no-pep420
+    # "PIE", # flake8-pie
+    # "T20", # flake8-print
+    # "PYI", # flake8-pyi
+    # "PT",  # flake8-pytest-style
+    # "Q",   # flake8-quotes
+    # "RSE", # flake8-raise
+    # "RET", # flake8-return
+    # "SLF", # flake8-self
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    # "TCH", # flake8-type-checking
+    # "ARG", # flake8-unused-arguments
+    # "PTH", # flake8-use-pathlib
+    # "ERA", # eradicate
+    # "PD",  # pandas-vet
+    # "PGH", # pygrep-hooks
+    # "PLC", # pylint-convention
+    "PLE", # pylint-error
+    # "PLR", # pylint-refactor
+    # "PLW", # pylint-warning
+    # "TRY", # tryceratops
+    # "NPY", # numpy
+    "RUF", # ruff
 ]
 extend-select = ["W", "PLW"]
 ignore = ["B905", "E203", "E501", "E741", "UP037"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["protein_mpnn"]
+known-first-party = ["mpnn"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
@@ -182,12 +185,12 @@ disable_error_code = ["import-not-found", "import-untyped", "no-any-return"]
 
 [[tool.mypy.overrides]]
 module = [
-  "datasets.*",
-  "huggingface_hub.*",
-  "hydra.*",
-  "pyarrow.*",
-  "torch.*",
-  "torch_geometric.*",
+    "datasets.*",
+    "huggingface_hub.*",
+    "hydra.*",
+    "pyarrow.*",
+    "torch.*",
+    "torch_geometric.*",
 ]
 ignore_missing_imports = true
 
@@ -196,9 +199,6 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-"protein_mpnn" = []
 
 [tool.pytest.ini_options]
 addopts = "-v -s --tb=short --strict-markers --color=yes"
