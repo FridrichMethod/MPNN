@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..model_utils import featurize
+from mpnn.model_utils import featurize
 
 
 class StaBddG(nn.Module):

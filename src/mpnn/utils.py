@@ -1,5 +1,4 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
+import csv
 import functools
 import os
 import random
@@ -10,6 +9,7 @@ from typing import Any, ParamSpec, TypeVar
 import numpy as np
 import torch
 import yaml
+from dateutil import parser
 
 from mpnn.typing_utils import StrPath
 
@@ -494,3 +494,50 @@ def loader_pdb(item, params):
         "masked": torch.Tensor(masked).int(),
         "label": item[0],
     }
+
+
+def build_training_clusters(params, debug=False):
+    val_ids = set([int(l) for l in open(params["VAL"]).readlines()])
+    test_ids = set([int(l) for l in open(params["TEST"]).readlines()])
+
+    if debug:
+        val_ids = []
+        test_ids = []
+
+    # read & clean list.csv
+    with open(params["LIST"]) as f:
+        reader = csv.reader(f)
+        next(reader)
+        rows = [
+            [r[0], r[3], int(r[4])]
+            for r in reader
+            if float(r[2]) <= params["RESCUT"]
+            and parser.parse(r[1]) <= parser.parse(params["DATCUT"])
+        ]
+
+    # compile training and validation sets
+    train = {}
+    valid = {}
+    test = {}
+
+    if debug:
+        rows = rows[:20]
+    for r in rows:
+        if r[2] in val_ids:
+            if r[2] in valid:
+                valid[r[2]].append(r[:2])
+            else:
+                valid[r[2]] = [r[:2]]
+        elif r[2] in test_ids:
+            if r[2] in test:
+                test[r[2]].append(r[:2])
+            else:
+                test[r[2]] = [r[:2]]
+        else:
+            if r[2] in train:
+                train[r[2]].append(r[:2])
+            else:
+                train[r[2]] = [r[:2]]
+    if debug:
+        valid = train
+    return train, valid, test
