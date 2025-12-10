@@ -5,13 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mpnn"
 description = "CS224W final project"
-# description = "StaBddG / ProteinMPNN stability experiments"
-dynamic = ["version"]
 authors = [
     { name = "Zhaoyang Li", email = "zhaoyangli@stanford.edu" },
     { name = "Pengwei Sun", email = "pengwei@stanford.edu" },
 ]
-# authors = [{ name = "Arthur Deng", email = "lxdeng@stanford.edu" }]
+dynamic = ["version"]
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.12"

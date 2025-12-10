@@ -15,7 +15,7 @@ def _load_pyproject() -> dict:
 
 def test_project_metadata_matches_pyproject() -> None:
     project = _load_pyproject()["project"]
-    assert project["name"] == "ProteinMPNN"
+    assert project["name"] == "mpnn"
     assert project["requires-python"] == ">=3.12"
     assert project["license"]["file"] == "LICENSE"
     assert project["readme"] == "README.md"
