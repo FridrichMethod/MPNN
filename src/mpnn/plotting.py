@@ -1,13 +1,14 @@
-import matplotlib.pyplot as plt
-import wandb
-from tqdm import tqdm
 import argparse
-import pickle
-import numpy as np
 import json
+import pickle
 from itertools import product
-from scipy.optimize import curve_fit
+
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
+import wandb
+from scipy.optimize import curve_fit
+from tqdm import tqdm
 
 # plt.rcParams.update(
 #     {
@@ -19,15 +20,13 @@ import matplotlib.colors as mcolors
 #     }
 # )
 
-plt.rcParams.update(
-    {
-        "font.family": "P052",
-        "mathtext.fontset": "custom",
-        "mathtext.rm": "P052",
-        "mathtext.it": "P052:italic",
-        "mathtext.bf": "P052:bold",
-    }
-)
+plt.rcParams.update({
+    "font.family": "P052",
+    "mathtext.fontset": "custom",
+    "mathtext.rm": "P052",
+    "mathtext.it": "P052:italic",
+    "mathtext.bf": "P052:bold",
+})
 
 # Custom color scheme
 LIGHT_BLUE = "#8CD9FF"
@@ -55,9 +54,10 @@ value_pretty_name_dict = {
 likelihood_to_color_dict = {
     "diffusion": ROBIN_EGG_BLUE,
     "normalized_energy": GOLD,
-    "ar": PURPLE,   
+    "ar": PURPLE,
     "token_value": PINK,
 }
+
 
 def parse_run(run):
     if key != "none" and key not in run.tags:
@@ -76,7 +76,7 @@ def parse_run(run):
     run_name = run.name
     run_dict["run_id"] = run_name
     run_json_config = json.loads(run.json_config)
-    
+
     # run_debug = run; import pdb; pdb.set_trace()
 
     run_dict["parameter_count"] = run_json_config.get("parameter_count", {}).get("value", None)
@@ -179,13 +179,20 @@ def back_out_data(loss, law):
     A, B, C = law.params
     return (A / (loss - C)) ** (1 / B)
 
+
 def plot_full_tradeoff(run_list):
     print("Plotting full tradeoff")
     plt.figure(figsize=(8, 6), dpi=300)
 
     for likelihood in ["ar", "diffusion", "normalized_energy", "token_value"]:
         runs = [run for run in run_list if run["likelihood"] == likelihood]
-        plt.scatter([run["final_train_loss"] for run in runs], [run["final_val_loss"] for run in runs], color=likelihood_to_color_dict[likelihood], label=value_pretty_name_dict[likelihood], alpha=0.5)
+        plt.scatter(
+            [run["final_train_loss"] for run in runs],
+            [run["final_val_loss"] for run in runs],
+            color=likelihood_to_color_dict[likelihood],
+            label=value_pretty_name_dict[likelihood],
+            alpha=0.5,
+        )
 
     plt.plot([0, 1], [0, 1], color="gray", linestyle=":", alpha=0.5)
     plt.axhline(y=0.5045790990193685, color="black", linestyle="--", label="ln 2 and Entropy")
@@ -200,13 +207,18 @@ def plot_full_tradeoff(run_list):
     plt.title("Full tradeoff")
     plt.savefig("unified/plots/full_tradeoff.png", bbox_inches="tight")
 
+
 def plot_likelihood_heatmap(run_list, likelihood):
     print(f"Plotting {likelihood} heatmap")
     run_list = [
-        run 
+        run
         for run in run_list
         if run["likelihood"] == likelihood
-        and ("dist-w" in run["model_name"] or "dist-normeng-w" in run["model_name"] or "dist-token_value-w" in run["model_name"])
+        and (
+            "dist-w" in run["model_name"]
+            or "dist-normeng-w" in run["model_name"]
+            or "dist-token_value-w" in run["model_name"]
+        )
     ]
 
     width_depth_loss_dict = {}
@@ -221,19 +233,29 @@ def plot_likelihood_heatmap(run_list, likelihood):
         depth_divider = float(model_name.split("-")[2][1:])
         loss = run["final_val_loss"]
         if (width_divider, depth_divider) not in width_depth_loss_dict:
-            width_depth_loss_dict[(width_divider, depth_divider)] = []
-        width_depth_loss_dict[(width_divider, depth_divider)].append(loss)
+            width_depth_loss_dict[width_divider, depth_divider] = []
+        width_depth_loss_dict[width_divider, depth_divider].append(loss)
 
-    unique_width_dividers = sorted(set(width_divider for width_divider, _ in width_depth_loss_dict.keys()), reverse=True)
-    unique_depth_dividers = sorted(set(depth_divider for _, depth_divider in width_depth_loss_dict.keys()), reverse=True)
+    unique_width_dividers = sorted(
+        set(width_divider for width_divider, _ in width_depth_loss_dict), reverse=True
+    )
+    unique_depth_dividers = sorted(
+        set(depth_divider for _, depth_divider in width_depth_loss_dict), reverse=True
+    )
 
-    width_depth_loss_matrix = np.full((len(unique_width_dividers), len(unique_depth_dividers)), np.nan)
+    width_depth_loss_matrix = np.full(
+        (len(unique_width_dividers), len(unique_depth_dividers)), np.nan
+    )
 
-    for width_index, depth_index in product(range(len(unique_width_dividers)), range(len(unique_depth_dividers))):
+    for width_index, depth_index in product(
+        range(len(unique_width_dividers)), range(len(unique_depth_dividers))
+    ):
         width_divider = unique_width_dividers[width_index]
         depth_divider = unique_depth_dividers[depth_index]
         if (width_divider, depth_divider) in width_depth_loss_dict:
-            width_depth_loss_matrix[width_index, depth_index] = min(width_depth_loss_dict[(width_divider, depth_divider)])
+            width_depth_loss_matrix[width_index, depth_index] = min(
+                width_depth_loss_dict[width_divider, depth_divider]
+            )
 
     plt.figure(figsize=(8, 6), dpi=300)
     plt.imshow(width_depth_loss_matrix, cmap=CUSTOM_CMAP)
@@ -253,6 +275,7 @@ def plot_likelihood_heatmap(run_list, likelihood):
             _ = plt.text(j, i, data_str, ha="center", va="center", color="black")
 
     plt.savefig(f"unified/plots/{likelihood}_heatmap.png", bbox_inches="tight")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -291,7 +314,7 @@ if __name__ == "__main__":
             if "mdlm" in run["run_id"]:
                 run["likelihood"] = "diffusion"
             elif "normeng" in run["run_id"]:
-                run["likelihood"] = 'normalized_energy'
+                run["likelihood"] = "normalized_energy"
             elif "token_value" in run["run_id"]:
                 run["likelihood"] = "token_value"
             else:
@@ -305,8 +328,7 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid mode: {mode}")
 
 
-
-## Some reference plotting code for style guidelines
+# Some reference plotting code for style guidelines
 
 # def plot_200M_sample(
 #     losses_for_200M, power_law_200M, run_losses_200M, best_single_model_hparams_ensemble_200M, epoched_data_scaling_law
