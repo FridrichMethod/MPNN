@@ -582,3 +582,4 @@ tmp/
 model_params/
 checkpoints/
 wandb/
+training_output/
