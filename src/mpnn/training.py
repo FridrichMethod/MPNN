@@ -2,15 +2,16 @@ import argparse
 import gc
 import os
 import os.path
-import random
 import time
 
 import numpy as np
+import pandas as pd
 import torch
 import wandb
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from tqdm import tqdm
 
+from mpnn.env import PROJECT_ROOT_DIR
 from mpnn.model_utils import ProteinMPNN, featurize, get_std_opt, loss_nll, loss_smoothed
 from mpnn.stability_eval import eval_pretrained_mpnn
 from mpnn.utils import (
@@ -20,18 +21,13 @@ from mpnn.utils import (
     build_training_clusters,
     flattened_PDB_dataset,
     loader_pdb,
+    seed_everything,
     worker_init_fn,
 )
 
 
 def get_run_name(args):
     return f"{args.code_version}_h{args.hidden_dim}_l{args.num_encoder_layers}_n{args.num_neighbors}_lr{args.learning_rate}_e{args.num_epochs}_wd{args.weight_decay}_bs{args.batch_size}_bb{args.backbone_noise}_s{args.seed}"
-
-
-def seed_everything(seed):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
 
 
 def setup_run(args):
@@ -77,9 +73,7 @@ def load_pdb_data(data_path, args):
 
     excluded_pdbs = []
     if args.exclude_membrane:
-        import pandas as pd
-
-        excluded_pdbs = pd.read_csv("./data/excluded_PDBs.csv")["PDB_IDS"].tolist()
+        excluded_pdbs = pd.read_csv(PROJECT_ROOT_DIR / "data/excluded_PDBs.csv")["PDB_IDS"].tolist()
 
     LOAD_PARAM = {
         "batch_size": 1,
@@ -222,7 +216,6 @@ def get_model_and_optimizer(args, device, total_steps):
                 model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
             )
             if args.scheduler == "cosine":
-                # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=0)
                 warmup_steps = int(0.01 * total_steps)
                 warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
                 cosine = CosineAnnealingLR(
@@ -403,6 +396,7 @@ def train(args):
                                 device=device,
                                 mc_samples=20,
                                 backbone_noise=args.backbone_noise,
+                                megascale_split_path=args.megascale_split_path,
                                 megascale_pdb_dir=args.megascale_pdb_dir,
                                 megascale_csv=args.megascale_csv,
                                 fsd_thermo_csv=args.fsd_thermo_csv,
@@ -502,13 +496,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--path_for_training_data",
         type=str,
-        default="my_path/pdb_2021aug02",
+        default=PROJECT_ROOT_DIR / "datasets/pdb_2021aug02",
         help="path for loading training data",
     )
     argparser.add_argument(
         "--output_dir",
         type=str,
-        default="./training_output",
+        default=PROJECT_ROOT_DIR / "results/train",
         help="path for logs and model weights",
     )
     argparser.add_argument(
@@ -609,30 +603,40 @@ if __name__ == "__main__":
     )
     argparser.add_argument("--debug", action="store_true", help="debug mode")
     argparser.add_argument(
+        "--megascale_split_path",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
+        help="path for megascale split",
+    )
+    argparser.add_argument(
         "--megascale_pdb_dir",
         type=str,
-        default="/data/megascale/AlphaFold_model_PDBs",
+        default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
         help="path for megascale PDBs",
     )
     argparser.add_argument(
         "--megascale_csv",
         type=str,
-        default="/data/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+        default=PROJECT_ROOT_DIR
+        / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
         help="path for megascale CSV",
     )
     argparser.add_argument(
         "--fsd_thermo_csv",
         type=str,
-        default="data/FSD/fsd_thermo.csv",
+        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv",
         help="path for FSD thermo CSV",
     )
     argparser.add_argument(
-        "--fsd_thermo_pdb_dir", type=str, default="data/FSD/PDBs", help="path for FSD thermo PDBs"
+        "--fsd_thermo_pdb_dir",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs",
+        help="path for FSD thermo PDBs",
     )
     argparser.add_argument(
         "--fsd_thermo_cache_path",
         type=str,
-        default="cache/fsd_thermo.pkl",
+        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
         help="path for FSD thermo cache",
     )
 

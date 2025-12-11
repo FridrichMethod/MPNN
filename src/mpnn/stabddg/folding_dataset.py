@@ -9,6 +9,7 @@ from Bio.PDB.Polypeptide import is_aa
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from mpnn.typing_utils import StrPath
 from mpnn.utils import StructureDataset
 
 three_to_one = {
@@ -315,12 +316,12 @@ def parse_CIF(path_to_cif):
 class FoldingDataset(Dataset):
     def __init__(
         self,
-        csv_path,
-        split_path="",
-        pdb_dir="",
-        pdb_dict_cache_path="",
-        cif=False,  # whether to use cif files instead of pdb files
-        alphabet="ACDEFGHIKLMNPQRSTVWYX",
+        csv_path: StrPath,
+        split_path: StrPath = "",
+        pdb_dir: StrPath = "",
+        pdb_dict_cache_path: StrPath = "",
+        cif: bool = False,  # whether to use cif files instead of pdb files
+        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
     ):
 
         self.alphabet = alphabet
@@ -388,7 +389,10 @@ class FoldingDataset(Dataset):
         return self.data[idx]
 
     def preprocess_structures(
-        self, pdb_dir: str = "", pdb_dict_cache_path: str = "cache/pdb_dict.pkl", cif: bool = False
+        self,
+        pdb_dir: StrPath = "",
+        pdb_dict_cache_path: StrPath = "cache/pdb_dict.pkl",
+        cif: bool = False,
     ) -> dict:
 
         file_paths = []
@@ -483,12 +487,12 @@ class FoldingDataset(Dataset):
 class ThermoMutDBDataset(FoldingDataset):
     def __init__(
         self,
-        csv_path,
-        split_path="",
-        pdb_dir="",
-        pdb_dict_cache_path="",
-        cif=False,
-        alphabet="ACDEFGHIKLMNPQRSTVWYX",
+        csv_path: StrPath,
+        split_path: StrPath = "",
+        pdb_dir: StrPath = "",
+        pdb_dict_cache_path: StrPath = "",
+        cif: bool = False,
+        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
     ):
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
@@ -505,12 +509,12 @@ class ThermoMutDBDataset(FoldingDataset):
 class MgnifyDataset(FoldingDataset):
     def __init__(
         self,
-        csv_path,
-        split_path="",
-        pdb_dir="",
-        pdb_dict_cache_path="",
-        cif=False,
-        alphabet="ACDEFGHIKLMNPQRSTVWYX",
+        csv_path: StrPath,
+        split_path: StrPath = "",
+        pdb_dir: StrPath = "",
+        pdb_dict_cache_path: StrPath = "",
+        cif: bool = False,
+        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
     ):
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
@@ -546,7 +550,13 @@ class MegascaleDataset(Dataset):
     This is non-standard and therefore does not inherit from the base FoldingDataset class.
     """
 
-    def __init__(self, csv_path="", pdb_dir="", split_path="", split=""):
+    def __init__(
+        self,
+        csv_path: StrPath = "",
+        pdb_dir: StrPath = "",
+        split_path: StrPath = "",
+        split: str = "",
+    ):
         # Dataset preprocessing/loading
 
         # Read split files

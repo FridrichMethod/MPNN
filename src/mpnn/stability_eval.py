@@ -1,3 +1,4 @@
+from mpnn.env import PROJECT_ROOT_DIR
 from mpnn.stabddg.folding_dataset import MegascaleDataset, ThermoMutDBDataset
 from mpnn.stabddg.model import StaBddG
 from mpnn.stability_finetune import validation_step
@@ -9,11 +10,13 @@ def eval_pretrained_mpnn(
     device="cuda",
     mc_samples=20,
     backbone_noise=0.2,
-    megascale_pdb_dir="/data/megascale/AlphaFold_model_PDBs",
-    megascale_csv="/data/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
-    fsd_thermo_csv="data/FSD/fsd_thermo.csv",
-    fsd_thermo_pdb_dir="data/FSD/PDBs",
-    fsd_thermo_cache_path="cache/fsd_thermo.pkl",
+    megascale_split_path=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
+    megascale_pdb_dir=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
+    megascale_csv=PROJECT_ROOT_DIR
+    / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+    fsd_thermo_csv=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv",
+    fsd_thermo_pdb_dir=PROJECT_ROOT_DIR / "datasets/FSD/PDBs",
+    fsd_thermo_cache_path=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
 ):
 
     model = StaBddG(
@@ -26,19 +29,19 @@ def eval_pretrained_mpnn(
     megascale_train = MegascaleDataset(
         csv_path=megascale_csv,
         pdb_dir=megascale_pdb_dir,
-        split_path="data/rocklin/mega_splits.pkl",
+        split_path=megascale_split_path,
         split="train",
     )
     megascale_valid = MegascaleDataset(
         csv_path=megascale_csv,
         pdb_dir=megascale_pdb_dir,
-        split_path="data/rocklin/mega_splits.pkl",
+        split_path=megascale_split_path,
         split="val",
     )
     megascale_test = MegascaleDataset(
         csv_path=megascale_csv,
         pdb_dir=megascale_pdb_dir,
-        split_path="data/rocklin/mega_splits.pkl",
+        split_path=megascale_split_path,
         split="test",
     )
     fsd_thermo_train = ThermoMutDBDataset(
