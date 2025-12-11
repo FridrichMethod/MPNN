@@ -22,9 +22,3 @@ cd PATH_TO_DATA_DIR
 wget https://files.ipd.uw.edu/pub/training_sets/pdb_2021aug02.tar.gz
 tar -xvzf pdb_2021aug02.tar.gz
 ```
-
-## Training
-
-```bash
-python src/training.py --path_for_training_data PATH_TO_DATA_DIR/pdb_2021aug02/ --wandb --wandb_project "pretraining-scaling" --wandb_entity "stanford-protein" --run_name "mpnn_original_implementation"
-```
