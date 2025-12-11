@@ -9,10 +9,12 @@ import pandas as pd
 import torch
 import wandb
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch_geometric import seed_everything
 from tqdm import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
-from mpnn.model_utils import ProteinMPNN, featurize, loss_nll, loss_smoothed
+from mpnn.model_utils import featurize, loss_nll, loss_smoothed
+from mpnn.protein_mpnn import ProteinMPNN
 from mpnn.stability_eval import eval_pretrained_mpnn
 from mpnn.utils import (
     PDB_dataset,
@@ -21,7 +23,6 @@ from mpnn.utils import (
     build_training_clusters,
     flattened_PDB_dataset,
     loader_pdb,
-    seed_everything,
     worker_init_fn,
 )
 
@@ -182,12 +183,8 @@ def get_model_and_optimizer(args, device, total_steps):
 
     warmup_steps = int(0.01 * total_steps)
     warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
-    cosine = CosineAnnealingLR(
-        optimizer, T_max=max(1, total_steps - warmup_steps), eta_min=0.0
-    )
-    scheduler = SequentialLR(
-        optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps]
-    )
+    cosine = CosineAnnealingLR(optimizer, T_max=max(1, total_steps - warmup_steps), eta_min=0.0)
+    scheduler = SequentialLR(optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps])
 
     if args.previous_checkpoint:
         checkpoint = torch.load(args.previous_checkpoint)
@@ -244,7 +241,7 @@ def train(args):
         ):
             try:
                 model.train()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
                     batch, device
                 )

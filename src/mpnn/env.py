@@ -20,7 +20,6 @@ def _detect_project_root_dir() -> Path:
     3) git rev-parse --show-toplevel
     4) Fallback: parent directory of the package src directory
     """
-
     project_root_dir_env = os.getenv("PROJECT_ROOT_DIR")
     if project_root_dir_env is not None:
         return norm_path(project_root_dir_env)

@@ -37,12 +37,10 @@ three_to_one = {
 
 
 def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
-    """
-    input:  x = PDB filename
+    """input:  x = PDB filename
             atoms = atoms to extract (optional)
     output: (length, atoms, coords=(x,y,z)), sequence
     """
-
     alpha_1 = list("ARNDCQEGHILKMFPSTWYV-")
     states = len(alpha_1)
     alpha_3 = [
@@ -254,14 +252,13 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
 
 
 def parse_CIF(path_to_cif):
-    """
-    Parse an mmCIF file and return a dict with these keys:
-      - seq_chain_<X>    : one-letter sequence for chain X
-      - coords_chain_<X> : dict with keys N_chain_X, CA_chain_X, C_chain_X, O_chain_X
-                           each mapping to a list of [x,y,z]
-      - name             : filename without extension
-      - num_of_chains    : number of chains parsed
-      - seq              : concatenation of all chain sequences in parsed order
+    """Parse an mmCIF file and return a dict with these keys:
+    - seq_chain_<X>    : one-letter sequence for chain X
+    - coords_chain_<X> : dict with keys N_chain_X, CA_chain_X, C_chain_X, O_chain_X
+                         each mapping to a list of [x,y,z]
+    - name             : filename without extension
+    - num_of_chains    : number of chains parsed
+    - seq              : concatenation of all chain sequences in parsed order
     """
     parser = MMCIFParser(QUIET=True)
     structure = parser.get_structure("S", path_to_cif)
@@ -545,8 +542,7 @@ class MgnifyBatchedDatset(Dataset):
 
 
 class MegascaleDataset(Dataset):
-    """
-    Note that the Megascale dataset is handled differently from other datasets due to naming issues.
+    """Note that the Megascale dataset is handled differently from other datasets due to naming issues.
     This is non-standard and therefore does not inherit from the base FoldingDataset class.
     """
 

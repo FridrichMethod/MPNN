@@ -4,22 +4,20 @@ import os
 import numpy as np
 import torch
 import wandb
-from mpnn.env import PROJECT_ROOT_DIR
 from scipy.stats import pearsonr, spearmanr
 from tqdm import tqdm
 
-from mpnn.model_utils import ProteinMPNN
+from mpnn.env import PROJECT_ROOT_DIR
+from mpnn.protein_mpnn import ProteinMPNN
 from mpnn.stabddg.folding_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
 from mpnn.stabddg.model import StaBddG
 
 
 def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
-    """
-    input:  x = PDB filename
+    """input:  x = PDB filename
             atoms = atoms to extract (optional)
     output: (length, atoms, coords=(x,y,z)), sequence
     """
-
     alpha_1 = list("ARNDCQEGHILKMFPSTWYV-")
     states = len(alpha_1)
     alpha_3 = [
@@ -586,26 +584,43 @@ if __name__ == "__main__":
     # Do not permutation order between mutant and wildtype during decoding.
     argparser.add_argument("--no_antithetic_variates", action="store_true")
     argparser.add_argument(
-        "--megascale_split_path", type=str, default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl"
+        "--megascale_split_path",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
     )
     argparser.add_argument(
-        "--megascale_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs"
+        "--megascale_pdb_dir",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
     )
     argparser.add_argument(
         "--megascale_csv",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+        default=PROJECT_ROOT_DIR
+        / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
     )
     argparser.add_argument(
         "--mgnify_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/wt_structures"
     )
     argparser.add_argument(
-        "--mgnify_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv"
+        "--mgnify_csv",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv",
     )
-    argparser.add_argument("--mgnify_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl")
-    argparser.add_argument("--fsd_thermo_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv")
-    argparser.add_argument("--fsd_thermo_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs")
-    argparser.add_argument("--fsd_thermo_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl")
+    argparser.add_argument(
+        "--mgnify_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl"
+    )
+    argparser.add_argument(
+        "--fsd_thermo_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
+    )
+    argparser.add_argument(
+        "--fsd_thermo_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
+    )
+    argparser.add_argument(
+        "--fsd_thermo_cache_path",
+        type=str,
+        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
+    )
     argparser.add_argument("--lr", type=float, default=1e-6)
     argparser.add_argument("--weight_decay", type=float, default=1e-2)
     argparser.add_argument("--random_init", action="store_true")

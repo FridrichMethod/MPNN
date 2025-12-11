@@ -1,3 +1,10 @@
+"""ProteinMPNN model.
+
+Adapted from https://github.com/pyg-team/pytorch_geometric/blob/master/examples/llm/protein_mpnn.py
+"""
+
+from __future__ import annotations
+
 from itertools import product
 
 import torch
@@ -184,6 +191,7 @@ class ProteinMPNN(torch.nn.Module):
         For an example of using :class:`ProteinMPNN`, see
         `examples/llm/protein_mpnn.py <https://github.com/pyg-team/
         pytorch_geometric/blob/master/examples/llm/protein_mpnn.py>`_.
+
     """
 
     def __init__(

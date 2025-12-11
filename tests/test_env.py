@@ -8,7 +8,6 @@ from mpnn import env
 
 def test_detect_package_root_dir_preserves_extracted_path(tmp_path, monkeypatch):
     """Simulate a zip-safe install and ensure the extracted path stays alive."""
-
     fake_root = object()
     extracted_dir = tmp_path / "pkg"
     extracted_dir.mkdir()

@@ -36,7 +36,6 @@ def get_conda_prefix() -> str:
 
 def clean_gpu_cache[**P, T](func: Callable[P, T]) -> Callable[P, T]:
     """Decorator to clean GPU memory cache after the decorated function is executed."""
-
     counter = 0
 
     @functools.wraps(func)
@@ -70,8 +69,8 @@ def norm_path(
 
     Returns:
         Path: The normalized file path.
-    """
 
+    """
     p = Path(path)
     if expandvars:
         p = Path(os.path.expandvars(p))
@@ -81,29 +80,6 @@ def norm_path(
         p = p.resolve()
 
     return p
-
-
-def seed_everything(seed: int = 0, freeze_cuda: bool = False) -> None:
-    """Set the seed for all random number generators.
-
-    Adapted from https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/seed.py
-    Freeze CUDA for reproducibility if needed.
-
-    Args:
-        seed (int, optional): The seed value. Defaults to 0.
-        freeze_cuda (bool, optional): Whether to freeze CUDA for reproducibility. Defaults to False.
-    """
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-    if freeze_cuda:
-        # nonrandom CUDNN convolution algo, maybe slower
-        torch.backends.cudnn.deterministic = True
-        # nonrandom selection of CUDNN convolution, maybe slower
-        torch.backends.cudnn.benchmark = False
 
 
 def load_config(config_path: StrPath) -> dict[str, Any]:
@@ -124,8 +100,8 @@ def enable_tf32_if_available(precision: str = "high") -> bool:
 
     Returns:
         bool: True if TF32 is enabled, False otherwise.
-    """
 
+    """
     enabled = False
 
     # Default to strict FP32 unless we detect Ampere+
