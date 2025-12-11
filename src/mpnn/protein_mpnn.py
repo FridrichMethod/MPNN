@@ -1,6 +1,6 @@
 """ProteinMPNN model.
 
-Adapted from https://github.com/pyg-team/pytorch_geometric/blob/master/examples/llm/protein_mpnn.py
+Adapted from https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/llm/models/protein_mpnn.py
 """
 
 from __future__ import annotations

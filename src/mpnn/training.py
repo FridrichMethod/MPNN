@@ -10,7 +10,7 @@ import torch
 import wandb
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch_geometric import seed_everything
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
 from mpnn.model_utils import featurize, loss_nll, loss_smoothed
@@ -161,20 +161,17 @@ def load_pdb_data(data_path, args):
 
 
 def get_model_and_optimizer(args, device, total_steps):
-    print("building model")
     model = ProteinMPNN(
-        node_features=args.hidden_dim,
-        edge_features=args.hidden_dim,
         hidden_dim=args.hidden_dim,
         num_encoder_layers=args.num_encoder_layers,
         num_decoder_layers=args.num_encoder_layers,
-        k_neighbors=args.num_neighbors,
+        num_neighbors=args.num_neighbors,
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
     )
     model.to(device)
 
-    print("model parameter count: ", sum(p.numel() for p in model.parameters()))
+    print("Total parameters: ", sum(p.numel() for p in model.parameters()))
 
     epoch = 0
     optimizer = torch.optim.AdamW(
@@ -197,9 +194,10 @@ def get_model_and_optimizer(args, device, total_steps):
 
 
 def train(args):
-    seed_everything(args.seed)
+    if args.seed is not None:
+        seed_everything(args.seed)
 
-    device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     run_name, tags, base_folder, logfile = setup_run(args)
     if (
@@ -224,9 +222,8 @@ def train(args):
             config=args.__dict__,
             tags=tags,
         )
-        wandb.log({"model_parameter_count": sum(p.numel() for p in model.parameters())})
+        wandb.log({"Total parameters": sum(p.numel() for p in model.parameters())})
 
-    print("entering training loop")
     total_step = 0
     for e in tqdm(range(args.num_epochs), desc="Epoch"):
         t0 = time.time()
@@ -249,10 +246,12 @@ def train(args):
 
                 if args.mixed_precision:
                     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all)
+                        log_probs = model(
+                            X, S, mask, chain_M, residue_idx, chain_encoding_all, batch
+                        )
                         _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
                 else:
-                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all)
+                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, batch)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
                 loss_av_smoothed.backward()
@@ -261,8 +260,7 @@ def train(args):
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_norm)
 
                 optimizer.step()
-                if args.scheduler == "cosine":
-                    scheduler.step()
+                scheduler.step()
 
                 loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
 
@@ -281,11 +279,6 @@ def train(args):
                     # Clear cache and free memory
                     torch.cuda.empty_cache()
                     gc.collect()
-                    # Zero gradients to free memory (safe even if no gradients exist)
-                    try:
-                        optimizer.zero_grad(set_to_none=True)
-                    except:
-                        pass
                     continue
                 else:
                     # Re-raise if it's not an OOM error

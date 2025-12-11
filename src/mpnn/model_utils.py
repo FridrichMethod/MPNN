@@ -21,75 +21,19 @@ def featurize(batch, device, dtype=torch.float32):
         [B, L_max], dtype=np.int32
     )  # integer encoding for chains 0, 0, 0,...0, 1, 1,..., 1, 2, 2, 2...
     S = np.zeros([B, L_max], dtype=np.int32)  # sequence AAs integers
-    init_alphabet = [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-    ]
-    extra_alphabet = [str(item) for item in list(np.arange(300))]
-    chain_letters = init_alphabet + extra_alphabet
     for i, b in enumerate(batch):
         masked_chains = b["masked_list"]
         visible_chains = b["visible_list"]
         all_chains = masked_chains + visible_chains
         visible_temp_dict = {}
         masked_temp_dict = {}
-        for step, letter in enumerate(all_chains):
+        for letter in all_chains:
             chain_seq = b[f"seq_chain_{letter}"]
             if letter in visible_chains:
                 visible_temp_dict[letter] = chain_seq
             elif letter in masked_chains:
                 masked_temp_dict[letter] = chain_seq
-        for km, vm in masked_temp_dict.items():
+        for vm in masked_temp_dict.values():
             for kv, vv in visible_temp_dict.items():
                 if vm == vv:
                     if kv not in masked_chains:
@@ -98,8 +42,6 @@ def featurize(batch, device, dtype=torch.float32):
                         visible_chains.remove(kv)
         all_chains = masked_chains + visible_chains
         random.shuffle(all_chains)  # randomly shuffle chain order
-        num_chains = b["num_of_chains"]
-        mask_dict = {}
         x_chain_list = []
         chain_mask_list = []
         chain_seq_list = []
@@ -107,7 +49,7 @@ def featurize(batch, device, dtype=torch.float32):
         c = 1
         l0 = 0
         l1 = 0
-        for step, letter in enumerate(all_chains):
+        for letter in all_chains:
             if letter in visible_chains:
                 chain_seq = b[f"seq_chain_{letter}"]
                 chain_length = len(chain_seq)
@@ -219,35 +161,3 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
     loss = -(S_onehot * log_probs).sum(-1)
     loss_av = torch.sum(loss * mask) / 2000.0  # fixed
     return loss, loss_av
-
-
-# The following gather functions
-def gather_edges(edges, neighbor_idx):
-    # Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
-    neighbors = neighbor_idx.unsqueeze(-1).expand(-1, -1, -1, edges.size(-1))
-    edge_features = torch.gather(edges, 2, neighbors)
-    return edge_features
-
-
-def gather_nodes(nodes, neighbor_idx):
-    # Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
-    # Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
-    neighbors_flat = neighbor_idx.view((neighbor_idx.shape[0], -1))
-    neighbors_flat = neighbors_flat.unsqueeze(-1).expand(-1, -1, nodes.size(2))
-    # Gather and re-pack
-    neighbor_features = torch.gather(nodes, 1, neighbors_flat)
-    neighbor_features = neighbor_features.view(list(neighbor_idx.shape)[:3] + [-1])
-    return neighbor_features
-
-
-def gather_nodes_t(nodes, neighbor_idx):
-    # Features [B,N,C] at Neighbor index [B,K] => Neighbor features[B,K,C]
-    idx_flat = neighbor_idx.unsqueeze(-1).expand(-1, -1, nodes.size(2))
-    neighbor_features = torch.gather(nodes, 1, idx_flat)
-    return neighbor_features
-
-
-def cat_neighbors_nodes(h_nodes, h_neighbors, E_idx):
-    h_nodes = gather_nodes(h_nodes, E_idx)
-    h_nn = torch.cat([h_neighbors, h_nodes], -1)
-    return h_nn

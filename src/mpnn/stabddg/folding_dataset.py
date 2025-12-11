@@ -7,7 +7,7 @@ import torch
 from Bio.PDB import MMCIFParser
 from Bio.PDB.Polypeptide import is_aa
 from torch.utils.data import Dataset
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from mpnn.typing_utils import StrPath
 from mpnn.utils import StructureDataset

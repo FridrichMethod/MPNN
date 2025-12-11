@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import wandb
 from scipy.stats import pearsonr, spearmanr
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
 from mpnn.protein_mpnn import ProteinMPNN
