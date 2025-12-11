@@ -258,7 +258,6 @@ def train(args):
 
     if args.wandb:
         wandb.init(
-            entity=args.wandb_entity,
             project=args.wandb_project,
             name=run_name,
             config=args.__dict__,
