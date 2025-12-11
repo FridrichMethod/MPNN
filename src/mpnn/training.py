@@ -83,7 +83,7 @@ def load_pdb_data(data_path, args):
 
     LOAD_PARAM = {
         "batch_size": 1,
-        "shuffle": False,  # Arthur: fix data order as a baseline
+        "shuffle": True,
         "pin_memory": False,
         "collate_fn": collate_passthrough_filter,
         "persistent_workers": True,
