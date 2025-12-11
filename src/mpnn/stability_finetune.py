@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 import wandb
+from mpnn.env import PROJECT_ROOT_DIR
 from scipy.stats import pearsonr, spearmanr
 from tqdm import tqdm
 
@@ -585,23 +586,26 @@ if __name__ == "__main__":
     # Do not permutation order between mutant and wildtype during decoding.
     argparser.add_argument("--no_antithetic_variates", action="store_true")
     argparser.add_argument(
-        "--megascale_pdb_dir", type=str, default="/data/megascale/AlphaFold_model_PDBs"
+        "--megascale_split_path", type=str, default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl"
+    )
+    argparser.add_argument(
+        "--megascale_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs"
     )
     argparser.add_argument(
         "--megascale_csv",
         type=str,
-        default="/data/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+        default=PROJECT_ROOT_DIR / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
     )
     argparser.add_argument(
-        "--mgnify_pdb_dir", type=str, default="/data/yehlin_mgnify/wt_structures"
+        "--mgnify_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/wt_structures"
     )
     argparser.add_argument(
-        "--mgnify_csv", type=str, default="data/mgnify_yehlin/mgnify_processed_data.csv"
+        "--mgnify_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv"
     )
-    argparser.add_argument("--mgnify_cache_path", type=str, default="cache/mgnify.pkl")
-    argparser.add_argument("--fsd_thermo_csv", type=str, default="data/FSD/fsd_thermo.csv")
-    argparser.add_argument("--fsd_thermo_pdb_dir", type=str, default="data/FSD/PDBs")
-    argparser.add_argument("--fsd_thermo_cache_path", type=str, default="cache/fsd_thermo.pkl")
+    argparser.add_argument("--mgnify_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl")
+    argparser.add_argument("--fsd_thermo_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv")
+    argparser.add_argument("--fsd_thermo_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs")
+    argparser.add_argument("--fsd_thermo_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl")
     argparser.add_argument("--lr", type=float, default=1e-6)
     argparser.add_argument("--weight_decay", type=float, default=1e-2)
     argparser.add_argument("--random_init", action="store_true")
@@ -638,20 +642,20 @@ if __name__ == "__main__":
         megascale_train = MegascaleDataset(
             csv_path=args.megascale_csv,
             pdb_dir=args.megascale_pdb_dir,
-            split_path="data/rocklin/mega_splits.pkl",
+            split_path=args.megascale_split_path,
             split="train",
         )
 
     megascale_valid = MegascaleDataset(
         csv_path=args.megascale_csv,
         pdb_dir=args.megascale_pdb_dir,
-        split_path="data/rocklin/mega_splits.pkl",
+        split_path=args.megascale_split_path,
         split="val",
     )
     megascale_test = MegascaleDataset(
         csv_path=args.megascale_csv,
         pdb_dir=args.megascale_pdb_dir,
-        split_path="data/rocklin/mega_splits.pkl",
+        split_path=args.megascale_split_path,
         split="test",
     )
     # Load pre-trained ProteinMPNN

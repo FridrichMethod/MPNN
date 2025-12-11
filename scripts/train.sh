@@ -4,9 +4,6 @@ PROJECT_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 python -m mpnn.training \
     --path_for_training_data "$PROJECT_ROOT_DIR"/datasets/pdb_2021aug02_sample/ \
-    --wandb \
-    --wandb_project mpnn-features \
-    --wandb_entity stanford-protein \
     --optimizer adamw \
     --scheduler cosine \
     --hidden_dim 128 \
@@ -30,4 +27,7 @@ python -m mpnn.training \
     --megascale_csv "$PROJECT_ROOT_DIR"/datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv \
     --fsd_thermo_csv "$PROJECT_ROOT_DIR"/datasets/FSD/fsd_thermo.csv \
     --fsd_thermo_pdb_dir "$PROJECT_ROOT_DIR"/datasets/FSD/PDBs \
-    --fsd_thermo_cache_path "$PROJECT_ROOT_DIR"/datasets/FSD/fsd_thermo.pkl
+    --fsd_thermo_cache_path "$PROJECT_ROOT_DIR"/datasets/FSD/fsd_thermo.pkl \
+    # --wandb \
+    # --wandb_project mpnn-features \
+    # --wandb_entity stanford-protein
