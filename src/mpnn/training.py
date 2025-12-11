@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from tqdm import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
-from mpnn.model_utils import ProteinMPNN, featurize, get_std_opt, loss_nll, loss_smoothed
+from mpnn.model_utils import ProteinMPNN, featurize, loss_nll, loss_smoothed
 from mpnn.stability_eval import eval_pretrained_mpnn
 from mpnn.utils import (
     PDB_dataset,
@@ -175,57 +175,27 @@ def get_model_and_optimizer(args, device, total_steps):
 
     print("model parameter count: ", sum(p.numel() for p in model.parameters()))
 
-    optimizer = None
-    scheduler = None
+    epoch = 0
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+    )
+
+    warmup_steps = int(0.01 * total_steps)
+    warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
+    cosine = CosineAnnealingLR(
+        optimizer, T_max=max(1, total_steps - warmup_steps), eta_min=0.0
+    )
+    scheduler = SequentialLR(
+        optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps]
+    )
 
     if args.previous_checkpoint:
         checkpoint = torch.load(args.previous_checkpoint)
-        total_step = checkpoint["step"]  # write total_step from the checkpoint
         epoch = checkpoint["epoch"]  # write epoch from the checkpoint
         model.load_state_dict(checkpoint["model_state_dict"])
-        if args.optimizer == "noam":
-            optimizer = get_std_opt(model.parameters(), args.hidden_dim, total_step)
-            optimizer.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        elif args.optimizer == "adamw":
-            optimizer = torch.optim.AdamW(
-                model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
-            )
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            if args.scheduler == "cosine":
-                # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=0)
-                warmup_steps = 0.01 * total_steps
-                warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
-                cosine = CosineAnnealingLR(
-                    optimizer, T_max=max(1, total_steps - warmup_steps), eta_min=0.0
-                )
-                scheduler = SequentialLR(
-                    optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps]
-                )
-                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-            else:
-                raise ValueError(f"Invalid scheduler type: {args.scheduler}")
-        else:
-            raise ValueError(f"Invalid optimizer type: {args.optimizer}")
-    else:
-        total_step = 0
-        epoch = 0
-        if args.optimizer == "noam":
-            optimizer = get_std_opt(model.parameters(), args.hidden_dim, total_step)
-        elif args.optimizer == "adamw":
-            optimizer = torch.optim.AdamW(
-                model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
-            )
-            if args.scheduler == "cosine":
-                warmup_steps = int(0.01 * total_steps)
-                warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
-                cosine = CosineAnnealingLR(
-                    optimizer, T_max=max(1, total_steps - warmup_steps), eta_min=0.0
-                )
-                scheduler = SequentialLR(
-                    optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps]
-                )
-        else:
-            raise ValueError(f"Invalid optimizer type: {args.optimizer}")
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
     return model, optimizer, scheduler, epoch
 
 
