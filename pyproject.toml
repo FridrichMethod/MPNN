@@ -15,8 +15,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "biopython",
-    "datasets==4.0.0", # Sherlock compatability (pyarrow<21.0.0)
-    "huggingface-hub",
+    "fire",
     "hydra-core",
     "jaxtyping",
     "jupyter",
@@ -24,17 +23,18 @@ dependencies = [
     "numpy",
     "pandas",
     "prody",
-    "pyarrow<21.0.0",  # Sherlock compatability
     "python-dateutil",
     "scipy",
     "seaborn",
-    "torch>=2.6.0",    # Sherlock compatability (glibc==2.17)
+    "torch-cluster @ https://data.pyg.org/whl/torch-2.8.0+cu128/torch_cluster-1.6.3+pt28cu128-cp312-cp312-linux_x86_64.whl",
+    "torch==2.8.0",
     "torch_geometric",
     "tqdm",
     "transformers",
     "typer",
     "uv",
     "wandb",
+    # "torch>=2.6.0",  # Sherlock compatability (glibc==2.17)
 ]
 
 [tool.setuptools.dynamic]
