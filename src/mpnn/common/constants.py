@@ -1,3 +1,5 @@
+"""Shared amino-acid constants and lookup tables."""
+
 from typing import Final
 
 AA_ALPHABET: Final[str] = "ACDEFGHIKLMNPQRSTVWYX"

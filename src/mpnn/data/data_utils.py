@@ -1,3 +1,5 @@
+"""Data utilities for the MPNN model."""
+
 import csv
 import os
 import random
@@ -8,7 +10,7 @@ from Bio.PDB.MMCIFParser import MMCIFParser
 from dateutil import parser
 from torch_geometric.data import Data
 
-from mpnn.constants import (
+from mpnn.common.constants import (
     AA_1_TO_N,
     AA_3_TO_1,
     AA_3_TO_N,
