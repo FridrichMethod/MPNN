@@ -77,7 +77,7 @@ class Encoder(MessagePassing):
         x: torch.Tensor,
         edge_index: torch.Tensor,
         edge_attr: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # NOTE: bug fixed here
         # x: [N, d_v]
         # edge_index: [2, E]
         # edge_attr: [E, d_e]
@@ -99,7 +99,7 @@ class Encoder(MessagePassing):
         self, x_i: torch.Tensor, x_j: torch.Tensor, edge_attr: torch.Tensor
     ) -> torch.Tensor:
         h = torch.cat([x_i, x_j, edge_attr], dim=-1)  # [E, 2*d_v + d_e]
-        h = self.out_e(h)  # [E, d_e]
+        h = self.out_v(h)  # [E, d_e]  # NOTE: bug fixed here
         return h
 
 
@@ -213,7 +213,9 @@ class ProteinMPNN(torch.nn.Module):
         self.num_rbf = num_rbf
         self.embedding = PositionalEncoding(num_positional_embedding)
         self.edge_mlp = torch.nn.Sequential(
-            torch.nn.Linear(num_positional_embedding + 400, hidden_dim),
+            torch.nn.Linear(
+                num_positional_embedding + num_rbf * 25, hidden_dim
+            ),  # NOTE: bug fixed here
             torch.nn.LayerNorm(hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         )
