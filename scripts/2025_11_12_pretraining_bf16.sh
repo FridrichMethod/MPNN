@@ -1,3 +1,0 @@
-#!/bin/bash
-
-python src/training.py --path_for_training_data /home/dlx/data/mpnn/raw/pdb_2021aug02/ --wandb --wandb_project pretraining-scaling --wandb_entity stanford-protein --optimizer adamw --scheduler cosine --learning_rate 3e-3 --weight_decay 1e-2 --num_epochs 256 --gradient_norm 1.0 --dropout 0.1 --backbone_noise 0.2 --rescut 3.5 --hidden_dim 128 --num_encoder_layers 3 --num_decoder_layers 3 --num_neighbors 48 --batch_size 10000 --max_protein_length 10000 --tags baseline,bf16,h128
