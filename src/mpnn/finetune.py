@@ -9,8 +9,8 @@ from tqdm.auto import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
 from mpnn.protein_mpnn import ProteinMPNN
-from mpnn.stabddg.folding_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
-from mpnn.stabddg.model import StaBddG
+from mpnn.stabddg import StaBddG
+from mpnn.stabddg_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
 
 
 def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
@@ -232,12 +232,6 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
         my_dict = {}
         s = 0
         concat_seq = ""
-        concat_N = []
-        concat_CA = []
-        concat_C = []
-        concat_O = []
-        concat_mask = []
-        coords_dict = {}
         for letter in chain_alphabet:
             if ca_only:
                 sidechain_atoms = ["CA"]
@@ -275,7 +269,6 @@ def validation_step(
     all_pred = []
     all_labels = []
     for sample in tqdm(dataset_valid):
-        pdb_name = sample["name"]
         ddG = sample["ddG"].to(device)
         mut_seqs = sample["complex_mut_seqs"]
         N = mut_seqs.shape[0]
@@ -335,7 +328,6 @@ def train_epoch(
     shuffled = [train_dataset[i] for i in perm]
 
     for sample in tqdm(shuffled, desc=f"{name} Epoch -- Complex"):
-        pdb_name = sample["name"]
         ddG = sample["ddG"].to(device)
         mut_seqs = sample["complex_mut_seqs"]
         N = mut_seqs.shape[0]
@@ -563,12 +555,12 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     argparser.add_argument("--run_name", type=str, default="stability_finetune")
-    argparser.add_argument("--checkpoint", type=str, default="model_ckpts/proteinmpnn.pt")
+    argparser.add_argument("--checkpoint", type=str, default="checkpoints/proteinmpnn.pt")
     argparser.add_argument("--seed", type=int, default=0)
     argparser.add_argument("--num_epochs", type=int, default=80)
     argparser.add_argument("--batch_size", type=int, default=10000)
     argparser.add_argument("--model_save_freq", type=int, default=10)
-    argparser.add_argument("--model_save_dir", type=str, default="cache/stability_finetuned")
+    argparser.add_argument("--model_save_dir", type=str, default="checkpoints/stability_finetuned")
     argparser.add_argument("--wandb", action="store_true")
 
     # Sample only one batch of mutants per domain during training.

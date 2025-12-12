@@ -1,6 +1,6 @@
 # MPNN
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3120/) [![CI Status](https://github.com/FridrichMethod/MPNN/workflows/CI/badge.svg)](https://github.com/FridrichMethod/MPNN/actions) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3120/) [![CI Status](https://github.com/FridrichMethod/MPNN/workflows/CI/badge.svg)](https://github.com/FridrichMethod/MPNN/actions) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/FridrichMethod/MPNN/blob/main/mpnn.ipynb)
 
 > CS224W final project
 

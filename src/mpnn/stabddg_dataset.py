@@ -216,12 +216,6 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
         my_dict = {}
         s = 0
         concat_seq = ""
-        concat_N = []
-        concat_CA = []
-        concat_C = []
-        concat_O = []
-        concat_mask = []
-        coords_dict = {}
         for letter in chain_alphabet:
             if ca_only:
                 sidechain_atoms = ["CA"]

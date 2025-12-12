@@ -175,7 +175,7 @@ class StructureDataset:
 
         self.data = []
 
-        for _, entry in enumerate(pdb_dict_list):
+        for entry in pdb_dict_list:
             seq = entry["seq"]
 
             bad_chars = set([s for s in seq]).difference(alphabet_set)
@@ -338,7 +338,7 @@ class PDBDataset(torch.utils.data.Dataset):
         return out
 
 
-class flattened_PDB_dataset(torch.utils.data.Dataset):
+class PDBDatasetFlattened(torch.utils.data.Dataset):
     def __init__(self, IDs, loader, dict, params, max_length=10000):
         self.IDs = IDs
         self.dict = dict
@@ -450,16 +450,12 @@ def loader_pdb(item, params):
     }
 
 
-def build_training_clusters(params, debug=False):
+def build_training_clusters(params):
     val_ids = set([int(l) for l in open(params["VAL"]).readlines()])
     test_ids = set([int(l) for l in open(params["TEST"]).readlines()])
 
-    if debug:
-        val_ids = []
-        test_ids = []
-
     # read & clean list.csv
-    with open(params["LIST"]) as f:
+    with open(params["LIST"], encoding="utf-8") as f:
         reader = csv.reader(f)
         next(reader)
         rows = [
@@ -474,8 +470,6 @@ def build_training_clusters(params, debug=False):
     valid = {}
     test = {}
 
-    if debug:
-        rows = rows[:20]
     for r in rows:
         if r[2] in val_ids:
             if r[2] in valid:
@@ -492,6 +486,5 @@ def build_training_clusters(params, debug=False):
                 train[r[2]].append(r[:2])
             else:
                 train[r[2]] = [r[:2]]
-    if debug:
-        valid = train
+
     return train, valid, test

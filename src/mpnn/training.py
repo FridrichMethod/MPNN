@@ -12,16 +12,19 @@ from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
+from mpnn.finetune import validation_step
 from mpnn.model_utils import loss_nll, loss_smoothed
 from mpnn.protein_mpnn import ProteinMPNN
-from mpnn.stability_eval import eval_pretrained_mpnn
+from mpnn.stabddg import StaBddG
+from mpnn.stabddg_dataset import MegascaleDataset, ThermoMutDBDataset
+from mpnn.typing_utils import StrPath
 from mpnn.utils import (
     PDBDataset,
+    PDBDatasetFlattened,
     StructureDataset,
     StructureLoader,
     build_training_clusters,
     enable_tf32_if_available,
-    flattened_PDB_dataset,
     loader_pdb,
     worker_init_fn,
 )
@@ -56,7 +59,7 @@ def setup_run(args):
     return run_name, tags, base_folder, logfile
 
 
-def load_pdb_data(data_path, args):
+def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
     params = {
         "LIST": os.path.join(data_path, "list.csv"),
         "VAL": os.path.join(data_path, "valid_clusters.txt"),
@@ -96,7 +99,7 @@ def load_pdb_data(data_path, args):
         train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
     )
 
-    valid_clusters = flattened_PDB_dataset(list(valid.keys()), loader_pdb, valid, params)
+    valid_clusters = PDBDatasetFlattened(list(valid.keys()), loader_pdb, valid, params)
     print(f"number of validation clusters: {len(valid_clusters)}")
     valid_cluster_loader = torch.utils.data.DataLoader(
         valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
@@ -172,6 +175,94 @@ def get_model_and_optimizer(args, device, total_steps):
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
     return model, optimizer, scheduler, epoch
+
+
+def eval_pretrained_mpnn(
+    pretrained_model,
+    batch_size=10000,
+    device="cuda",
+    mc_samples=20,
+    backbone_noise=0.2,
+    megascale_split_path=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
+    megascale_pdb_dir=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
+    megascale_csv=PROJECT_ROOT_DIR
+    / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+    fsd_thermo_csv=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv",
+    fsd_thermo_pdb_dir=PROJECT_ROOT_DIR / "datasets/FSD/PDBs",
+    fsd_thermo_cache_path=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
+):
+
+    model = StaBddG(
+        pmpnn=pretrained_model,
+        use_antithetic_variates=True,
+        noise_level=backbone_noise,
+        device=device,
+    )
+
+    megascale_train = MegascaleDataset(
+        csv_path=megascale_csv,
+        pdb_dir=megascale_pdb_dir,
+        split_path=megascale_split_path,
+        split="train",
+    )
+    megascale_valid = MegascaleDataset(
+        csv_path=megascale_csv,
+        pdb_dir=megascale_pdb_dir,
+        split_path=megascale_split_path,
+        split="val",
+    )
+    megascale_test = MegascaleDataset(
+        csv_path=megascale_csv,
+        pdb_dir=megascale_pdb_dir,
+        split_path=megascale_split_path,
+        split="test",
+    )
+    fsd_thermo_train = ThermoMutDBDataset(
+        csv_path=fsd_thermo_csv,
+        pdb_dir=fsd_thermo_pdb_dir,
+        pdb_dict_cache_path=fsd_thermo_cache_path,
+        cif=False,
+    )
+
+    train_metrics = validation_step(
+        model,
+        megascale_train,
+        batch_size=batch_size,
+        name="train",
+        device=device,
+        mc_samples=mc_samples,
+    )
+    valid_metrics = validation_step(
+        model,
+        megascale_valid,
+        batch_size=batch_size,
+        name="valid",
+        device=device,
+        mc_samples=mc_samples,
+    )
+    test_metrics = validation_step(
+        model,
+        megascale_test,
+        batch_size=batch_size,
+        name="test",
+        device=device,
+        mc_samples=mc_samples,
+    )
+    fsd_thermo_metrics = validation_step(
+        model,
+        fsd_thermo_train,
+        batch_size=batch_size,
+        name="fsd_thermo",
+        device=device,
+        mc_samples=mc_samples,
+    )
+
+    # convert all metric values to floating point
+    train_metrics = {k: float(v) for k, v in train_metrics.items()}
+    valid_metrics = {k: float(v) for k, v in valid_metrics.items()}
+    test_metrics = {k: float(v) for k, v in test_metrics.items()}
+    fsd_thermo_metrics = {k: -1 * float(v) for k, v in fsd_thermo_metrics.items()}
+    return train_metrics, valid_metrics, test_metrics, fsd_thermo_metrics
 
 
 def train(args):

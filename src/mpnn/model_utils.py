@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 
-def featurize(batch, device, dtype=torch.float32):
+def featurize(batch, device):
     alphabet = "ACDEFGHIKLMNPQRSTVWYX"
     B = len(batch)
     lengths = np.array([len(b["seq"]) for b in batch], dtype=np.int32)  # sum of chain seq lengths
@@ -130,11 +130,12 @@ def featurize(batch, device, dtype=torch.float32):
     # Conversion
     residue_idx = torch.from_numpy(residue_idx).to(dtype=torch.long, device=device)
     S = torch.from_numpy(S).to(dtype=torch.long, device=device)
-    X = torch.from_numpy(X).to(dtype=dtype, device=device)
-    mask = torch.from_numpy(mask).to(dtype=dtype, device=device)
-    mask_self = torch.from_numpy(mask_self).to(dtype=dtype, device=device)
-    chain_M = torch.from_numpy(chain_M).to(dtype=dtype, device=device)
+    X = torch.from_numpy(X).to(dtype=torch.float, device=device)
+    mask = torch.from_numpy(mask).to(dtype=torch.float, device=device)
+    mask_self = torch.from_numpy(mask_self).to(dtype=torch.float, device=device)
+    chain_M = torch.from_numpy(chain_M).to(dtype=torch.float, device=device)
     chain_encoding_all = torch.from_numpy(chain_encoding_all).to(dtype=torch.long, device=device)
+
     return X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all
 
 
