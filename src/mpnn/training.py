@@ -88,12 +88,10 @@ def setup_run(args):
         tags = args.tags
         tags.extend(run_name.split("_"))
 
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     base_folder = os.path.join(args.output_dir, run_name)
-    if not os.path.exists(base_folder):
-        os.makedirs(base_folder)
+    os.makedirs(base_folder, exist_ok=True)
 
     logfile = os.path.join(base_folder, "log.txt")
 
@@ -221,6 +219,7 @@ def get_model_and_optimizer(args, device, total_steps):
     return model, optimizer, scheduler, epoch
 
 
+@torch.inference_mode()
 def eval_pretrained_mpnn(
     pretrained_model,
     batch_size=10000,
@@ -235,12 +234,14 @@ def eval_pretrained_mpnn(
     fsd_thermo_cache_path=FSD_THERMO_CACHE_PATH,
 ):
 
+    pretrained_model.eval()
     model = EnergyMPNN(
         protein_mpnn=pretrained_model,
         use_antithetic_variates=True,
         noise_level=backbone_noise,
         device=device,
     )
+    model.eval()
 
     megascale_train = MegascaleDataset(
         csv_path=megascale_csv,
@@ -517,6 +518,7 @@ def train(args):
 
         t1 = time.time()
         dt = np.format_float_positional(np.float32(t1 - t0), unique=False, precision=1)
+        os.makedirs(os.path.dirname(logfile), exist_ok=True)
         with open(logfile, "a") as f:
             f.write(
                 f"epoch: {e + 1}, step: {total_step}, time: {dt}, train: {train_perplexity_}, valid: {validation_perplexity_}, train_acc: {train_accuracy_}, valid_acc: {validation_accuracy_}, skipped_batches: {skipped_batches}\n"

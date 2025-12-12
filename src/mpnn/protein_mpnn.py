@@ -9,9 +9,38 @@ from itertools import product
 
 import torch
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn import knn_graph
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import to_dense_adj, to_dense_batch
+
+
+def build_autoregressive_mask(
+    chain_seq_label: torch.Tensor,
+    chain_mask_all: torch.Tensor,
+    mask: torch.Tensor,
+    batch: torch.Tensor,
+    edge_index: torch.Tensor,
+) -> torch.Tensor:
+    """Ground-truth dense autoregressive mask used for regression checks."""
+    device = chain_seq_label.device
+    batch_chain_mask_all, _ = to_dense_batch(chain_mask_all * mask, batch)  # [B, N]
+
+    # 0 - visible - encoder, 1 - masked - decoder
+    noise = torch.abs(torch.randn(batch_chain_mask_all.shape, device=device))
+    decoding_order = torch.argsort((batch_chain_mask_all + 1e-4) * noise)
+    mask_size = batch_chain_mask_all.size(1)
+    permutation_matrix_reverse = F.one_hot(decoding_order, num_classes=mask_size).float()
+    order_mask_backward = torch.einsum(
+        "ij, biq, bjp->bqp",
+        1 - torch.triu(torch.ones(mask_size, mask_size, device=device)),
+        permutation_matrix_reverse,
+        permutation_matrix_reverse,
+    )
+    adj = to_dense_adj(edge_index, batch)
+    mask_attend = order_mask_backward[adj.bool()].unsqueeze(-1)
+
+    return mask_attend
 
 
 class PositionWiseFeedForward(torch.nn.Module):
@@ -205,12 +234,14 @@ class ProteinMPNN(torch.nn.Module):
         augment_eps: float = 0.2,
         num_positional_embedding: int = 16,
         vocab_size: int = 21,
+        checkpoint_featurize: bool = True,
     ) -> None:
         super().__init__()
         self.augment_eps = augment_eps
         self.hidden_dim = hidden_dim
         self.num_neighbors = num_neighbors
         self.num_rbf = num_rbf
+        self.checkpoint_featurize = checkpoint_featurize
         self.embedding = PositionalEncoding(num_positional_embedding)
         self.edge_mlp = torch.nn.Sequential(
             torch.nn.Linear(
@@ -286,11 +317,23 @@ class ProteinMPNN(torch.nn.Module):
         chain_encoding_all: torch.Tensor,
         batch: torch.Tensor,
     ) -> torch.Tensor:
-        device = x.device
         if self.training and self.augment_eps > 0:
             x = x + self.augment_eps * torch.randn_like(x)
 
-        edge_index, edge_attr = self._featurize(x, mask, batch)
+        if self.training and self.checkpoint_featurize:
+            # checkpoint needs at least one differentiable input; clone x with requires_grad
+            # to enable recomputation without changing forward values and to stay compatible
+            # with older PyTorch versions
+            x_for_ckpt = x if x.requires_grad else x.detach().requires_grad_(True)
+            edge_index, edge_attr = checkpoint(
+                self._featurize,
+                x_for_ckpt,
+                mask,
+                batch,
+                use_reentrant=False,
+            )
+        else:
+            edge_index, edge_attr = self._featurize(x, mask, batch)
 
         row, col = edge_index
         offset = residue_idx[row] - residue_idx[col]
@@ -304,24 +347,15 @@ class ProteinMPNN(torch.nn.Module):
         for encoder in self.encoder_layers:
             h_v, h_e = encoder(h_v, edge_index, h_e)
 
-        # mask
+        # mask (sparse decoding order)
         h_label = self.label_embedding(chain_seq_label)
-        batch_chain_mask_all, _ = to_dense_batch(chain_mask_all * mask, batch)  # [B, N]
-        # 0 - visible - encoder, 1 - masked - decoder
-        decoding_order = torch.argsort(
-            (batch_chain_mask_all + 1e-4)
-            * (torch.abs(torch.randn(batch_chain_mask_all.shape, device=device)))
+        mask_attend = build_autoregressive_mask(
+            chain_seq_label,
+            chain_mask_all,
+            mask,
+            batch,
+            edge_index,
         )
-        mask_size = batch_chain_mask_all.size(1)
-        permutation_matrix_reverse = F.one_hot(decoding_order, num_classes=mask_size).float()
-        order_mask_backward = torch.einsum(
-            "ij, biq, bjp->bqp",
-            1 - torch.triu(torch.ones(mask_size, mask_size, device=device)),
-            permutation_matrix_reverse,
-            permutation_matrix_reverse,
-        )
-        adj = to_dense_adj(edge_index, batch)
-        mask_attend = order_mask_backward[adj.bool()].unsqueeze(-1)
 
         # decoder
         for decoder in self.decoder_layers:

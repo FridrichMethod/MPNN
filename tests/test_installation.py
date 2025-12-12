@@ -27,7 +27,7 @@ def test_core_dependencies_declared() -> None:
     project = _load_pyproject()["project"]
     dependencies = set(project["dependencies"])
     required = {
-        "torch>=2.6.0",
+        "torch==2.8.0",
         "torch_geometric",
         "transformers",
         "numpy",
