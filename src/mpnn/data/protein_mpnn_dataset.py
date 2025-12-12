@@ -77,20 +77,20 @@ class StructureLoader:
 
 
 class PDBDataset(Dataset):
-    def __init__(self, IDs, loader, dict, params, max_length=10000):
-        self.IDs = IDs
+    def __init__(self, ids, loader, dict, params, max_length=10000):
+        self.ids = ids
         self.dict = dict
         self.loader = loader
         self.params = params
         self.max_length = max_length
 
     def __len__(self):
-        return len(self.IDs)
+        return len(self.ids)
 
     def __getitem__(self, index):
-        ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.dict[ID]))
-        out = self.loader(self.dict[ID][sel_idx], self.params)
+        idx = self.ids[index]
+        sel_idx = np.random.randint(0, len(self.dict[idx]))
+        out = self.loader(self.dict[idx][sel_idx], self.params)
         if "label" not in out:
             return None
         out = process_pdb(out)
@@ -100,16 +100,16 @@ class PDBDataset(Dataset):
 
 
 class PDBDatasetFlattened(Dataset):
-    def __init__(self, IDs, loader, dict, params, max_length=10000):
-        self.IDs = IDs
+    def __init__(self, ids, loader, dict, params, max_length=10000):
+        self.ids = ids
         self.dict = dict
         self.loader = loader
         self.params = params
         self.max_length = max_length
         self.flattened_ids = []
-        for ID in self.IDs:
-            for idx in range(len(self.dict[ID])):
-                self.flattened_ids.append(self.dict[ID][idx])
+        for idx in self.ids:
+            for idx in range(len(self.dict[idx])):
+                self.flattened_ids.append(self.dict[idx][idx])
 
     def __len__(self):
         return len(self.flattened_ids)
