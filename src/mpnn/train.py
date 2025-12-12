@@ -186,7 +186,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
     return pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs
 
 
-def get_model_and_optimizer(args, device, total_steps):
+def get_model_and_optimizer(args, device: Device, total_steps):
     model = ProteinMPNN(
         hidden_dim=args.hidden_dim,
         num_encoder_layers=args.num_encoder_layers,

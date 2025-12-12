@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.types import Device
 
 from mpnn.data.data_utils import featurize
 
@@ -12,7 +13,7 @@ class EnergyMPNN(nn.Module):
         use_antithetic_variates=True,
         noise_level=0.1,
         l_to_r=False,
-        device="cuda",
+        device: Device = "cuda",
     ):
         super().__init__()
         self.protein_mpnn = protein_mpnn

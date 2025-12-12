@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import wandb
 from scipy.stats import pearsonr, spearmanr
+from torch.types import Device
 from tqdm.auto import tqdm
 
 from mpnn.data import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
@@ -23,7 +24,12 @@ from mpnn.models import EnergyMPNN, ProteinMPNN
 
 
 def validation_step(
-    model, dataset_valid, batch_size=20000, name="val", mc_samples=20, device="cuda"
+    model,
+    dataset_valid,
+    batch_size=20000,
+    name="val",
+    mc_samples=20,
+    device: Device = "cuda",
 ):
     val_spearman = []
     val_pearson = []
@@ -80,7 +86,13 @@ def validation_step(
 
 
 def train_epoch(
-    model, train_dataset, optimizer, ddG_loss_fn, name="megascale", batch_size=10000, device="cuda"
+    model,
+    train_dataset,
+    optimizer,
+    ddG_loss_fn,
+    name="megascale",
+    batch_size=10000,
+    device: Device = "cuda",
 ):
     train_sum = []
     all_pred = []
@@ -136,7 +148,12 @@ def train_epoch(
 
 
 def mgnify_train_epoch(
-    model, mgnify_dataset, optimizer, ddG_loss_fn, batch_size=10000, device="cuda"
+    model,
+    mgnify_dataset,
+    optimizer,
+    ddG_loss_fn,
+    batch_size=10000,
+    device: Device = "cuda",
 ):
     model.train()
 
@@ -205,7 +222,7 @@ def finetune(
     fsd_thermo_train,
     args,
     batch_size=10000,
-    device="cuda",
+    device: Device = "cuda",
 ):
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs)

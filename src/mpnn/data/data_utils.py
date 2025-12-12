@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from Bio.PDB.MMCIFParser import MMCIFParser
 from dateutil import parser
+from torch.types import Device
 from torch_geometric.data import Data
 
 from mpnn.common.constants import (
@@ -46,7 +47,7 @@ def is_aa(x: str) -> bool:
     return x in AA_ALPHABET
 
 
-def featurize(batch, device):
+def featurize(batch, device: Device = None):
     B = len(batch)
     lengths = np.array([len(b["seq"]) for b in batch], dtype=np.int32)  # sum of chain seq lengths
     L_max = max([len(b["seq"]) for b in batch])
