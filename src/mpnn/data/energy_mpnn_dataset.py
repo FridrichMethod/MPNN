@@ -256,8 +256,6 @@ class MegascaleDataset(Dataset):
         split_path: StrPath = "",
         split: str = "",
     ):
-        # Dataset preprocessing/loading
-
         # Read split files
         complex_names = None
         with open(split_path, "rb") as f:
@@ -328,14 +326,14 @@ class MegascaleDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        complex = self.structure_data[idx]
-        pdb_name = complex["name"]
+        protein_complex = self.structure_data[idx]
+        pdb_name = protein_complex["name"]
         complex_mut_seqs = self.ddG_data[f"{pdb_name}.pdb"]["mut_seqs"]
         ddG = self.ddG_data[f"{pdb_name}.pdb"]["ddG"]
 
         return {
             "name": pdb_name,
-            "complex": complex,
+            "complex": protein_complex,
             "complex_mut_seqs": complex_mut_seqs,
             "ddG": ddG,
         }

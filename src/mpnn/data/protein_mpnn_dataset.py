@@ -1,7 +1,7 @@
 """ProteinMPNN dataset."""
 
 import numpy as np
-import torch
+from torch.utils.data import Dataset
 from torch_geometric.data import Batch
 
 from mpnn.common.constants import AA_ALPHABET
@@ -9,8 +9,8 @@ from mpnn.data.data_utils import entry_to_pyg_data, process_pdb
 
 
 class StructureDataset:
-    def __init__(self, pdb_dict_list, truncate=None, max_length=100, alphabet=AA_ALPHABET):
-        alphabet_set = set([a for a in alphabet])
+    def __init__(self, pdb_dict_list, truncate=None, max_length=100):
+        alphabet_set = set([a for a in AA_ALPHABET])
         discard_count = {"bad_chars": 0, "too_long": 0, "bad_seq_length": 0}
 
         self.data = []
@@ -76,7 +76,7 @@ class StructureLoader:
             yield Batch.from_data_list(data_list)  # type: ignore[arg-type]
 
 
-class PDBDataset(torch.utils.data.Dataset):
+class PDBDataset(Dataset):
     def __init__(self, IDs, loader, dict, params, max_length=10000):
         self.IDs = IDs
         self.dict = dict
@@ -99,7 +99,7 @@ class PDBDataset(torch.utils.data.Dataset):
         return out
 
 
-class PDBDatasetFlattened(torch.utils.data.Dataset):
+class PDBDatasetFlattened(Dataset):
     def __init__(self, IDs, loader, dict, params, max_length=10000):
         self.IDs = IDs
         self.dict = dict
