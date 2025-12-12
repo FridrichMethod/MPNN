@@ -12,6 +12,7 @@ import yaml
 from dateutil import parser
 from torch_geometric.data import Batch, Data
 
+from mpnn.constants import AA_1_TO_N, AA_ALPHABET, AA_N_TO_1, CHAIN_ALPHABET, STATES_ALPHA_1
 from mpnn.model_utils import featurize
 from mpnn.typing_utils import StrPath
 
@@ -166,10 +167,24 @@ def parse_amp_dtype(amp_dtype: str | None) -> torch.dtype | None:
         ) from e
 
 
+def AA_to_N(x):
+    """Convert one-letter amino acid codes to numeric indices."""
+    x = np.array(x)
+    if x.ndim == 0:
+        x = x[None]
+    return [[AA_1_TO_N.get(a, STATES_ALPHA_1 - 1) for a in y] for y in x]
+
+
+def N_to_AA(x):
+    """Convert numeric amino acid indices back to one-letter codes."""
+    x = np.array(x)
+    if x.ndim == 1:
+        x = x[None]
+    return ["".join([AA_N_TO_1.get(a, "-") for a in y]) for y in x]
+
+
 class StructureDataset:
-    def __init__(
-        self, pdb_dict_list, truncate=None, max_length=100, alphabet="ACDEFGHIKLMNPQRSTVWYX"
-    ):
+    def __init__(self, pdb_dict_list, truncate=None, max_length=100, alphabet=AA_ALPHABET):
         alphabet_set = set([a for a in alphabet])
         discard_count = {"bad_chars": 0, "too_long": 0, "bad_seq_length": 0}
 
@@ -257,10 +272,6 @@ def worker_init_fn(worker_id):
 
 
 def process_pdb(t):
-    init_alphabet = list("ACDEFGHIKLMNPQRSTVWYXabcdefghijklmnopqrstuvwxyz")
-    extra_alphabet = [str(item) for item in list(np.arange(300))]
-    chain_alphabet = init_alphabet + extra_alphabet
-
     my_dict = {}
     concat_seq = ""
     mask_list = []
@@ -268,7 +279,7 @@ def process_pdb(t):
     if len(list(np.unique(t["idx"]))) >= 352:
         return None
     for idx in list(np.unique(t["idx"])):
-        letter = chain_alphabet[idx]
+        letter = CHAIN_ALPHABET[idx]
         res = np.argwhere(t["idx"] == idx)
         initial_sequence = "".join(list(np.array(list(t["seq"]))[res][0,]))
         if initial_sequence[-6:] == "HHHHHH":

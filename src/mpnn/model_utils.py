@@ -3,32 +3,18 @@ import random
 import numpy as np
 import torch
 
-three_to_one = {
-    "CYS": "C",
-    "ASP": "D",
-    "SER": "S",
-    "GLN": "Q",
-    "LYS": "K",
-    "ILE": "I",
-    "PRO": "P",
-    "THR": "T",
-    "PHE": "F",
-    "ASN": "N",
-    "GLY": "G",
-    "HIS": "H",
-    "LEU": "L",
-    "ARG": "R",
-    "TRP": "W",
-    "ALA": "A",
-    "VAL": "V",
-    "GLU": "E",
-    "TYR": "Y",
-    "MET": "M",
-}
+from mpnn.constants import (
+    AA_3_TO_N,
+    AA_ALPHABET,
+    BACKBONE_ATOMS,
+    CA_ATOMS,
+    CHAIN_ALPHABET,
+    THREE_TO_ONE,
+)
+from mpnn.utils import N_to_AA
 
 
 def featurize(batch, device):
-    alphabet = "ACDEFGHIKLMNPQRSTVWYX"
     B = len(batch)
     lengths = np.array([len(b["seq"]) for b in batch], dtype=np.int32)  # sum of chain seq lengths
     L_max = max([len(b["seq"]) for b in batch])
@@ -143,7 +129,7 @@ def featurize(batch, device):
         chain_encoding_all[i, :] = chain_encoding_pad
 
         # Convert to labels
-        indices = np.asarray([alphabet.index(a) for a in all_sequence], dtype=np.int32)
+        indices = np.asarray([AA_ALPHABET.index(a) for a in all_sequence], dtype=np.int32)
         S[i, :l] = indices
 
     isnan = np.isnan(X)
@@ -192,52 +178,6 @@ def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
             atoms = atoms to extract (optional)
     output: (length, atoms, coords=(x,y,z)), sequence
     """
-    alpha_1 = list("ARNDCQEGHILKMFPSTWYV-")
-    states = len(alpha_1)
-    alpha_3 = [
-        "ALA",
-        "ARG",
-        "ASN",
-        "ASP",
-        "CYS",
-        "GLN",
-        "GLU",
-        "GLY",
-        "HIS",
-        "ILE",
-        "LEU",
-        "LYS",
-        "MET",
-        "PHE",
-        "PRO",
-        "SER",
-        "THR",
-        "TRP",
-        "TYR",
-        "VAL",
-        "GAP",
-    ]
-
-    aa_1_N = {a: n for n, a in enumerate(alpha_1)}
-    aa_3_N = {a: n for n, a in enumerate(alpha_3)}
-    aa_N_1 = {n: a for n, a in enumerate(alpha_1)}
-    aa_1_3 = {a: b for a, b in zip(alpha_1, alpha_3)}
-    aa_3_1 = {b: a for a, b in zip(alpha_1, alpha_3)}
-
-    def AA_to_N(x):
-        # ["ARND"] -> [[0,1,2,3]]
-        x = np.array(x)
-        if x.ndim == 0:
-            x = x[None]
-        return [[aa_1_N.get(a, states - 1) for a in y] for y in x]
-
-    def N_to_AA(x):
-        # [[0,1,2,3]] -> ["ARND"]
-        x = np.array(x)
-        if x.ndim == 1:
-            x = x[None]
-        return ["".join([aa_N_1.get(a, "-") for a in y]) for y in x]
-
     xyz, seq, min_resn, max_resn = {}, {}, 1e6, -1e6
     for line in open(x, "rb"):
         line = line.decode("utf-8", "ignore").rstrip()
@@ -281,7 +221,7 @@ def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
         for resn in range(min_resn, max_resn + 1):
             if resn in seq:
                 for k in sorted(seq[resn]):
-                    seq_.append(aa_3_N.get(seq[resn][k], 20))
+                    seq_.append(AA_3_TO_N.get(seq[resn][k], 20))
             else:
                 seq_.append(20)
             if resn in xyz:
@@ -302,62 +242,7 @@ def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
 def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
     c = 0
     pdb_dict_list = []
-    init_alphabet = [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-    ]
-    extra_alphabet = [str(item) for item in list(np.arange(300))]
-    chain_alphabet = init_alphabet + extra_alphabet
+    chain_alphabet = list(CHAIN_ALPHABET)
 
     if input_chain_list:
         chain_alphabet = input_chain_list
@@ -368,10 +253,7 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
         s = 0
         concat_seq = ""
         for letter in chain_alphabet:
-            if ca_only:
-                sidechain_atoms = ["CA"]
-            else:
-                sidechain_atoms = ["N", "CA", "C", "O"]
+            sidechain_atoms = CA_ATOMS if ca_only else BACKBONE_ATOMS
             xyz, seq = parse_PDB_biounits(biounit, atoms=sidechain_atoms, chain=letter)
             if type(xyz) != str:
                 concat_seq += seq[0]
@@ -428,7 +310,7 @@ def parse_CIF(path_to_cif):
         for res in chain:
             if not is_aa(res.get_resname(), standard=True):
                 continue
-            seq.append(three_to_one[res.get_resname()])
+            seq.append(THREE_TO_ONE[res.get_resname()])
             # for each backbone atom, either grab coords or fill nan
             for atom_name in ("N", "CA", "C", "O"):
                 if atom_name in res:

@@ -66,8 +66,27 @@ def _detect_package_root_dir() -> Path:
 PROJECT_ROOT_DIR = _detect_project_root_dir()
 PACKAGE_ROOT_DIR = _detect_package_root_dir()
 
+DEFAULT_TRAIN_DATA_PATH = PROJECT_ROOT_DIR / "datasets/pdb_2021aug02"
+DEFAULT_TRAIN_OUTPUT_DIR = PROJECT_ROOT_DIR / "checkpoints/train"
+DEFAULT_FINETUNE_OUTPUT_DIR = PROJECT_ROOT_DIR / "checkpoints/finetune"
+
+MEGASCALE_SPLIT_PATH = PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl"
+MEGASCALE_PDB_DIR = PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs"
+MEGASCALE_CSV = PROJECT_ROOT_DIR / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv"
+FSD_THERMO_CSV = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
+FSD_THERMO_PDB_DIR = PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
+FSD_THERMO_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl"
+
 
 __all__ = [
+    "DEFAULT_TRAIN_DATA_PATH",
+    "DEFAULT_TRAIN_OUTPUT_DIR",
+    "FSD_THERMO_CACHE_PATH",
+    "FSD_THERMO_CSV",
+    "FSD_THERMO_PDB_DIR",
+    "MEGASCALE_CSV",
+    "MEGASCALE_PDB_DIR",
+    "MEGASCALE_SPLIT_PATH",
     "PACKAGE_ROOT_DIR",
     "PROJECT_ROOT_DIR",
 ]

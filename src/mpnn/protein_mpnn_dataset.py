@@ -20,6 +20,8 @@ from torch_geometric.data import (
 )
 from tqdm.auto import tqdm
 
+from mpnn.constants import AA_ALPHABET, BACKBONE_ATOMS, CHAIN_ALPHABET
+
 
 class ProteinMPNNDataset(InMemoryDataset):
     r"""The ProteinMPNN dataset from the `"Robust deep learning based protein
@@ -119,7 +121,7 @@ class ProteinMPNNDataset(InMemoryDataset):
         os.unlink(file_path)
 
     def process(self) -> None:
-        alphabet_set = set(list("ACDEFGHIKLMNPQRSTVWYX"))
+        alphabet_set = set(AA_ALPHABET)
         cluster_ids = self._process_split()
         total_items = sum(len(items) for items in cluster_ids.values())
         data_list = []
@@ -309,9 +311,7 @@ class ProteinMPNNDataset(InMemoryDataset):
         }
 
     def _process_pdb2(self, t: dict[str, Any]) -> dict[str, Any]:
-        init_alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-        extra_alphabet = [str(item) for item in list(np.arange(300))]
-        chain_alphabet = init_alphabet + extra_alphabet
+        chain_alphabet = list(CHAIN_ALPHABET)
         my_dict: dict[str, str | int | dict[str, Any] | list[Any]] = {}
         concat_seq = ""
         mask_list = []
@@ -350,7 +350,7 @@ class ProteinMPNNDataset(InMemoryDataset):
                     visible_list.append(letter)
                 coords_dict_chain = {}
                 all_atoms = np.array(t["xyz"][res])[0]  # [L, 14, 3]
-                for i, c in enumerate(["N", "CA", "C", "O"]):
+                for i, c in enumerate(BACKBONE_ATOMS):
                     coords_dict_chain[f"{c}_chain_{letter}"] = all_atoms[:, i, :].tolist()
                 my_dict[f"coords_chain_{letter}"] = coords_dict_chain
         my_dict["name"] = t["label"]
@@ -426,8 +426,9 @@ class ProteinMPNNDataset(InMemoryDataset):
         chain_encoding_all = np.concatenate(chain_encoding_list, 0)
 
         # Convert to labels
-        alphabet = "ACDEFGHIKLMNPQRSTVWYX"
-        chain_seq_label_all = np.asarray([alphabet.index(a) for a in chain_seq_all], dtype=np.int32)
+        chain_seq_label_all = np.asarray(
+            [AA_ALPHABET.index(a) for a in chain_seq_all], dtype=np.int32
+        )
 
         isnan = np.isnan(x_chain_all)
         mask = np.isfinite(np.sum(x_chain_all, (1, 2))).astype(np.float32)

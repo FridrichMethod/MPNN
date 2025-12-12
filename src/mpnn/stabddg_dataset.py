@@ -4,14 +4,14 @@ import pickle
 import numpy as np
 import pandas as pd
 import torch
-from Bio.PDB import MMCIFParser
-from Bio.PDB.Polypeptide import is_aa
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
-from mpnn.model_utils import parse_PDB, parse_CIF
+from mpnn.constants import AA_ALPHABET
+from mpnn.model_utils import parse_CIF, parse_PDB
 from mpnn.typing_utils import StrPath
 from mpnn.utils import StructureDataset
+
 
 class FoldingDataset(Dataset):
     def __init__(
@@ -21,7 +21,7 @@ class FoldingDataset(Dataset):
         pdb_dir: StrPath = "",
         pdb_dict_cache_path: StrPath = "",
         cif: bool = False,  # whether to use cif files instead of pdb files
-        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
+        alphabet: str = AA_ALPHABET,
     ):
 
         self.alphabet = alphabet
@@ -192,7 +192,7 @@ class ThermoMutDBDataset(FoldingDataset):
         pdb_dir: StrPath = "",
         pdb_dict_cache_path: StrPath = "",
         cif: bool = False,
-        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
+        alphabet: str = AA_ALPHABET,
     ):
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
@@ -214,7 +214,7 @@ class MgnifyDataset(FoldingDataset):
         pdb_dir: StrPath = "",
         pdb_dict_cache_path: StrPath = "",
         cif: bool = False,
-        alphabet: str = "ACDEFGHIKLMNPQRSTVWYX",
+        alphabet: str = AA_ALPHABET,
     ):
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
@@ -282,7 +282,7 @@ class MegascaleDataset(Dataset):
             pdb_dict.append(parse_PDB(path)[0])
 
         # Read ddG data
-        self.ALPHABET = "ACDEFGHIKLMNPQRSTVWYX"
+        self.ALPHABET = AA_ALPHABET
         self.ddG_data = {}
 
         df_2 = pd.read_csv(csv_path, low_memory=False)
