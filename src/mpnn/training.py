@@ -1,7 +1,6 @@
 import argparse
 import gc
 import os
-import os.path
 import time
 
 import numpy as np
@@ -17,10 +16,11 @@ from mpnn.model_utils import loss_nll, loss_smoothed
 from mpnn.protein_mpnn import ProteinMPNN
 from mpnn.stability_eval import eval_pretrained_mpnn
 from mpnn.utils import (
-    PDB_dataset,
+    PDBDataset,
     StructureDataset,
     StructureLoader,
     build_training_clusters,
+    enable_tf32_if_available,
     flattened_PDB_dataset,
     loader_pdb,
     worker_init_fn,
@@ -90,7 +90,7 @@ def load_pdb_data(data_path, args):
 
     print("loading datasets")
 
-    train_clusters = PDB_dataset(list(train.keys()), loader_pdb, train, params)
+    train_clusters = PDBDataset(list(train.keys()), loader_pdb, train, params)
     print(f"number of training clusters: {len(train_clusters)}")
     train_cluster_loader = torch.utils.data.DataLoader(
         train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
@@ -177,6 +177,9 @@ def get_model_and_optimizer(args, device, total_steps):
 def train(args):
     if args.seed is not None:
         seed_everything(args.seed)
+
+    if enable_tf32_if_available():
+        print(f"TF32 is enabled. Precision: {torch.get_float32_matmul_precision()}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

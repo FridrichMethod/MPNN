@@ -315,7 +315,7 @@ def process_pdb(t):
     return my_dict
 
 
-class PDB_dataset(torch.utils.data.Dataset):
+class PDBDataset(torch.utils.data.Dataset):
     def __init__(self, IDs, loader, dict, params, max_length=10000):
         self.IDs = IDs
         self.dict = dict
