@@ -7,6 +7,8 @@ import wandb
 from scipy.stats import pearsonr, spearmanr
 from tqdm.auto import tqdm
 
+from mpnn.energy_mpnn import EnergyMPNN
+from mpnn.energy_mpnn_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
 from mpnn.env import (
     FSD_THERMO_CACHE_PATH,
     FSD_THERMO_CSV,
@@ -19,8 +21,6 @@ from mpnn.env import (
     MGNIFY_PDB_DIR,
 )
 from mpnn.protein_mpnn import ProteinMPNN
-from mpnn.stabddg import StaBddG
-from mpnn.stabddg_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
 
 
 def validation_step(
@@ -304,13 +304,14 @@ def finetune(
             if not os.path.exists(args.model_save_dir):
                 os.makedirs(args.model_save_dir)
             torch.save(
-                model.pmpnn.state_dict(), f"{args.model_save_dir}/{args.run_name}_epoch{e}.pt"
+                model.protein_mpnn.state_dict(),
+                f"{args.model_save_dir}/{args.run_name}_epoch{e}.pt",
             )
 
     if not os.path.exists(args.model_save_dir):
         os.makedirs(args.model_save_dir)
 
-    torch.save(model.pmpnn.state_dict(), f"{args.model_save_dir}/{args.run_name}_final.pt")
+    torch.save(model.protein_mpnn.state_dict(), f"{args.model_save_dir}/{args.run_name}_final.pt")
 
 
 if __name__ == "__main__":
@@ -437,7 +438,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda")
 
-    pmpnn = ProteinMPNN(
+    protein_mpnn = ProteinMPNN(
         hidden_dim=args.embedding_dim,
         num_encoder_layers=args.num_layers,
         num_decoder_layers=args.num_layers,
@@ -448,13 +449,13 @@ if __name__ == "__main__":
 
     mpnn_checkpoint = torch.load(args.checkpoint)
     if "model_state_dict" in mpnn_checkpoint.keys():
-        pmpnn.load_state_dict(mpnn_checkpoint["model_state_dict"])
+        protein_mpnn.load_state_dict(mpnn_checkpoint["model_state_dict"])
     else:
-        pmpnn.load_state_dict(mpnn_checkpoint)
+        protein_mpnn.load_state_dict(mpnn_checkpoint)
     print("Successfully loaded model at", args.checkpoint)
 
-    model = StaBddG(
-        pmpnn=pmpnn,
+    model = EnergyMPNN(
+        protein_mpnn=protein_mpnn,
         use_antithetic_variates=not args.no_antithetic_variates,
         noise_level=args.noise_level,
         device=device,

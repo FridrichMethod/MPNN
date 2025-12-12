@@ -13,6 +13,8 @@ from torch.types import Device
 from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
+from mpnn.energy_mpnn import EnergyMPNN
+from mpnn.energy_mpnn_dataset import MegascaleDataset, ThermoMutDBDataset
 from mpnn.env import (
     DEFAULT_TRAIN_DATA_PATH,
     DEFAULT_TRAIN_OUTPUT_DIR,
@@ -36,8 +38,6 @@ from mpnn.protein_mpnn_dataset import (
     StructureDataset,
     StructureLoader,
 )
-from mpnn.stabddg import StaBddG
-from mpnn.stabddg_dataset import MegascaleDataset, ThermoMutDBDataset
 from mpnn.typing_utils import StrPath
 from mpnn.utils import enable_tf32_if_available
 
@@ -235,8 +235,8 @@ def eval_pretrained_mpnn(
     fsd_thermo_cache_path=FSD_THERMO_CACHE_PATH,
 ):
 
-    model = StaBddG(
-        pmpnn=pretrained_model,
+    model = EnergyMPNN(
+        protein_mpnn=pretrained_model,
         use_antithetic_variates=True,
         noise_level=backbone_noise,
         device=device,

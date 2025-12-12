@@ -5,12 +5,17 @@ import torch.nn.functional as F
 from mpnn.model_utils import featurize
 
 
-class StaBddG(nn.Module):
+class EnergyMPNN(nn.Module):
     def __init__(
-        self, pmpnn, use_antithetic_variates=True, noise_level=0.1, l_to_r=False, device="cuda"
+        self,
+        protein_mpnn,
+        use_antithetic_variates=True,
+        noise_level=0.1,
+        l_to_r=False,
+        device="cuda",
     ):
         super().__init__()
-        self.pmpnn = pmpnn
+        self.protein_mpnn = protein_mpnn
         self.use_antithetic_variates = use_antithetic_variates
         self.noise_level = noise_level
         self.device = device
@@ -38,7 +43,7 @@ class StaBddG(nn.Module):
         order = decoding_order.repeat(B, 1) if decoding_order is not None else None
         backbone_noise = backbone_noise.repeat(B, 1, 1, 1) if backbone_noise is not None else None
 
-        log_probs = self.pmpnn(
+        log_probs = self.protein_mpnn(
             X_,
             S_,
             mask_,
@@ -128,7 +133,7 @@ class StaBddG(nn.Module):
                 backbone_noise * S_mask[..., None, None]
             )  # this line is to make sure that padded positions have no noise
 
-        log_probs = self.pmpnn(
+        log_probs = self.protein_mpnn(
             X_,
             S_,
             mask_,
