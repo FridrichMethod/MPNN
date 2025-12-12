@@ -5,7 +5,6 @@ import torch
 from torch_geometric.data import Batch
 
 from mpnn.constants import AA_ALPHABET
-
 from mpnn.data.data_utils import entry_to_pyg_data, process_pdb
 
 

@@ -4,11 +4,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
-import numpy as np
 import torch
 import yaml
 
-from mpnn.constants import AA_1_TO_N, AA_ALPHABET, AA_N_TO_1, VOCAB_SIZE
 from mpnn.typing_utils import StrPath
 
 P = ParamSpec("P")
@@ -160,24 +158,3 @@ def parse_amp_dtype(amp_dtype: str | None) -> torch.dtype | None:
             f"Unsupported amp dtype string: {amp_dtype!r}. "
             "Use one of: fp16/float16/half, bf16/bfloat16, fp32/float32/float."
         ) from e
-
-
-def AA_to_N(x):
-    """Convert one-letter amino acid codes to numeric indices."""
-    x = np.array(x)
-    if x.ndim == 0:
-        x = x[None]
-    return [[AA_1_TO_N.get(a, VOCAB_SIZE - 1) for a in y] for y in x]
-
-
-def N_to_AA(x):
-    """Convert numeric amino acid indices back to one-letter codes."""
-    x = np.array(x)
-    if x.ndim == 1:
-        x = x[None]
-    return ["".join([AA_N_TO_1.get(a, "-") for a in y]) for y in x]
-
-
-def is_aa(x: str) -> bool:
-    """Check if a string is a valid amino acid."""
-    return x in AA_ALPHABET
