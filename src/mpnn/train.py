@@ -13,12 +13,18 @@ from torch.types import Device
 from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
-from mpnn.data_utils import (
+from mpnn.data import (
+    MegascaleDataset,
+    PDBDataset,
+    PDBDatasetFlattened,
+    StructureDataset,
+    StructureLoader,
+    ThermoMutDBDataset,
+)
+from mpnn.data.data_utils import (
     build_training_clusters,
     loader_pdb,
 )
-from mpnn.energy_mpnn import EnergyMPNN
-from mpnn.energy_mpnn_dataset import MegascaleDataset, ThermoMutDBDataset
 from mpnn.env import (
     DEFAULT_TRAIN_DATA_PATH,
     DEFAULT_TRAIN_OUTPUT_DIR,
@@ -31,13 +37,7 @@ from mpnn.env import (
     PROJECT_ROOT_DIR,
 )
 from mpnn.finetune import validation_step
-from mpnn.protein_mpnn import ProteinMPNN
-from mpnn.protein_mpnn_dataset import (
-    PDBDataset,
-    PDBDatasetFlattened,
-    StructureDataset,
-    StructureLoader,
-)
+from mpnn.models import EnergyMPNN, ProteinMPNN
 from mpnn.typing_utils import StrPath
 from mpnn.utils import enable_tf32_if_available
 

@@ -7,8 +7,7 @@ import wandb
 from scipy.stats import pearsonr, spearmanr
 from tqdm.auto import tqdm
 
-from mpnn.energy_mpnn import EnergyMPNN
-from mpnn.energy_mpnn_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
+from mpnn.data import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
 from mpnn.env import (
     FSD_THERMO_CACHE_PATH,
     FSD_THERMO_CSV,
@@ -20,7 +19,7 @@ from mpnn.env import (
     MGNIFY_CSV,
     MGNIFY_PDB_DIR,
 )
-from mpnn.protein_mpnn import ProteinMPNN
+from mpnn.models import EnergyMPNN, ProteinMPNN
 
 
 def validation_step(

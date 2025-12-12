@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 
-from mpnn.protein_mpnn import build_autoregressive_mask
+from mpnn.models.protein_mpnn import build_autoregressive_mask
 
 
 def build_autoregressive_mask_legacy(

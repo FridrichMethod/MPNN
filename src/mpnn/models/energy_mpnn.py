@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mpnn.data_utils import featurize
+from mpnn.data.data_utils import featurize
 
 
 class EnergyMPNN(nn.Module):

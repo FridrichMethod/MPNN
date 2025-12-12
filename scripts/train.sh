@@ -16,7 +16,7 @@ python -m mpnn.train \
     --rescut 3.5 \
     --num_workers 8 \
     --batch_size 2000 \
-    --num_epochs 200 \
+    --num_epochs 4 \
     --learning_rate 3e-3 \
     --weight_decay 1e-2 \
     --gradient_norm 1.0 \
@@ -29,6 +29,7 @@ python -m mpnn.train \
     --fsd_thermo_csv "$PROJECT_ROOT_DIR"/datasets/FSD/fsd_thermo.csv \
     --fsd_thermo_pdb_dir "$PROJECT_ROOT_DIR"/datasets/FSD/PDBs \
     --fsd_thermo_cache_path "$PROJECT_ROOT_DIR"/datasets/FSD/fsd_thermo.pkl \
+    --force_rerun \
     --wandb \
     --wandb_project mpnn-features \
     --wandb_entity stanford-protein
