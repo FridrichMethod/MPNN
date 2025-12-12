@@ -28,13 +28,13 @@ from mpnn.data.data_utils import (
 from mpnn.env import (
     DEFAULT_TRAIN_DATA_PATH,
     DEFAULT_TRAIN_OUTPUT_DIR,
+    EXCLUDED_PDBS_CSV,
     FSD_THERMO_CACHE_PATH,
     FSD_THERMO_CSV,
     FSD_THERMO_PDB_DIR,
     MEGASCALE_CSV,
     MEGASCALE_PDB_DIR,
     MEGASCALE_SPLIT_PATH,
-    PROJECT_ROOT_DIR,
 )
 from mpnn.finetune import validation_step
 from mpnn.models import EnergyMPNN, ProteinMPNN
@@ -119,7 +119,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
     excluded_pdbs = []
     if args.exclude_membrane:
-        excluded_pdbs = pd.read_csv(PROJECT_ROOT_DIR / "data/excluded_PDBs.csv")["PDB_IDS"].tolist()
+        excluded_pdbs = pd.read_csv(EXCLUDED_PDBS_CSV)["PDB_IDS"].tolist()
 
     LOAD_PARAM = {
         "batch_size": 1,

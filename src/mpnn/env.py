@@ -79,11 +79,13 @@ MGNIFY_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl"
 FSD_THERMO_CSV = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
 FSD_THERMO_PDB_DIR = PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
 FSD_THERMO_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl"
+EXCLUDED_PDBS_CSV = PROJECT_ROOT_DIR / "data/excluded_PDBs.csv"
 
 
 __all__ = [
     "DEFAULT_TRAIN_DATA_PATH",
     "DEFAULT_TRAIN_OUTPUT_DIR",
+    "EXCLUDED_PDBS_CSV",
     "FSD_THERMO_CACHE_PATH",
     "FSD_THERMO_CSV",
     "FSD_THERMO_PDB_DIR",
