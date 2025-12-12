@@ -282,7 +282,7 @@ class MegascaleDataset(Dataset):
             pdb_dict.append(parse_pdb(path)[0])
 
         # Read ddG data
-        self.ALPHABET = AA_ALPHABET
+        self.alphabet = AA_ALPHABET
         self.ddG_data = {}
 
         df_2 = pd.read_csv(csv_path, low_memory=False)
@@ -310,7 +310,7 @@ class MegascaleDataset(Dataset):
         for name, mut_df in self.ddG_data.items():
             index_matrix = []
             for s in mut_df["mut_seqs"]:
-                indices = np.asarray([self.ALPHABET.index(a) for a in s], dtype=np.int64)
+                indices = np.asarray([self.alphabet.index(a) for a in s], dtype=np.int64)
                 index_matrix.append(indices)
             index_matrix = np.vstack(index_matrix)
             self.ddG_data[name]["mut_seqs"] = torch.from_numpy(index_matrix)
