@@ -4,6 +4,7 @@ PROJECT_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 python -m mpnn.training \
     --path_for_training_data "$PROJECT_ROOT_DIR"/datasets/pdb_2021aug02_sample/ \
+    --output_dir "$PROJECT_ROOT_DIR"/checkpoints/train \
     --optimizer adamw \
     --scheduler cosine \
     --hidden_dim 128 \
@@ -15,7 +16,7 @@ python -m mpnn.training \
     --rescut 3.5 \
     --num_workers 8 \
     --batch_size 10000 \
-    --num_epochs 2 \
+    --num_epochs 200 \
     --learning_rate 3e-3 \
     --weight_decay 1e-2 \
     --gradient_norm 1.0 \

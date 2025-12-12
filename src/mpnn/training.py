@@ -499,9 +499,7 @@ def train(args):
         )
 
         # save model weights
-        optimizer_state_dict = (
-            optimizer.optimizer.state_dict() if args.optimizer == "noam" else optimizer.state_dict()
-        )
+        optimizer_state_dict = optimizer.state_dict()
         model_info = {
             "epoch": e + 1,
             "step": total_step,
@@ -560,7 +558,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--output_dir",
         type=str,
-        default=PROJECT_ROOT_DIR / "results/train",
+        default=PROJECT_ROOT_DIR / "checkpoints/train",
         help="path for logs and model weights",
     )
     argparser.add_argument(
