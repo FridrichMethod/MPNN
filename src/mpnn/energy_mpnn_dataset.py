@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
 from mpnn.constants import AA_ALPHABET
-from mpnn.model_utils import parse_cif, parse_pdb
+from mpnn.data_utils import parse_cif, parse_pdb
 from mpnn.protein_mpnn_dataset import StructureDataset
 from mpnn.typing_utils import StrPath
 
