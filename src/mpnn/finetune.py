@@ -7,7 +7,17 @@ import wandb
 from scipy.stats import pearsonr, spearmanr
 from tqdm.auto import tqdm
 
-from mpnn.env import PROJECT_ROOT_DIR
+from mpnn.env import (
+    FSD_THERMO_CACHE_PATH,
+    FSD_THERMO_CSV,
+    FSD_THERMO_PDB_DIR,
+    MEGASCALE_CSV,
+    MEGASCALE_PDB_DIR,
+    MEGASCALE_SPLIT_PATH,
+    MGNIFY_CACHE_PATH,
+    MGNIFY_CSV,
+    MGNIFY_PDB_DIR,
+)
 from mpnn.protein_mpnn import ProteinMPNN
 from mpnn.stabddg import StaBddG
 from mpnn.stabddg_dataset import MegascaleDataset, MgnifyDataset, ThermoMutDBDataset
@@ -330,40 +340,47 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--megascale_split_path",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
+        default=MEGASCALE_SPLIT_PATH,
     )
     argparser.add_argument(
         "--megascale_pdb_dir",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
+        default=MEGASCALE_PDB_DIR,
     )
     argparser.add_argument(
         "--megascale_csv",
         type=str,
-        default=PROJECT_ROOT_DIR
-        / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+        default=MEGASCALE_CSV,
     )
     argparser.add_argument(
-        "--mgnify_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/wt_structures"
+        "--mgnify_pdb_dir",
+        type=str,
+        default=MGNIFY_PDB_DIR,
     )
     argparser.add_argument(
         "--mgnify_csv",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv",
+        default=MGNIFY_CSV,
     )
     argparser.add_argument(
-        "--mgnify_cache_path", type=str, default=PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl"
+        "--mgnify_cache_path",
+        type=str,
+        default=MGNIFY_CACHE_PATH,
     )
     argparser.add_argument(
-        "--fsd_thermo_csv", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
+        "--fsd_thermo_csv",
+        type=str,
+        default=FSD_THERMO_CSV,
     )
     argparser.add_argument(
-        "--fsd_thermo_pdb_dir", type=str, default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
+        "--fsd_thermo_pdb_dir",
+        type=str,
+        default=FSD_THERMO_PDB_DIR,
     )
     argparser.add_argument(
         "--fsd_thermo_cache_path",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
+        default=FSD_THERMO_CACHE_PATH,
     )
     argparser.add_argument("--lr", type=float, default=1e-6)
     argparser.add_argument("--weight_decay", type=float, default=1e-2)
@@ -417,16 +434,14 @@ if __name__ == "__main__":
         split_path=args.megascale_split_path,
         split="test",
     )
-    # Load pre-trained ProteinMPNN
+
     device = torch.device("cuda")
 
     pmpnn = ProteinMPNN(
-        node_features=128,
-        edge_features=128,
         hidden_dim=args.embedding_dim,
         num_encoder_layers=args.num_layers,
         num_decoder_layers=args.num_layers,
-        k_neighbors=args.num_neighbors,
+        num_neighbors=args.num_neighbors,
         dropout=0.0,
         augment_eps=0.0,
     )

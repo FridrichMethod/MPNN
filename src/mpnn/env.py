@@ -73,6 +73,9 @@ DEFAULT_FINETUNE_OUTPUT_DIR = PROJECT_ROOT_DIR / "checkpoints/finetune"
 MEGASCALE_SPLIT_PATH = PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl"
 MEGASCALE_PDB_DIR = PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs"
 MEGASCALE_CSV = PROJECT_ROOT_DIR / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv"
+MGNIFY_PDB_DIR = PROJECT_ROOT_DIR / "datasets/mgnify/wt_structures"
+MGNIFY_CSV = PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv"
+MGNIFY_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl"
 FSD_THERMO_CSV = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
 FSD_THERMO_PDB_DIR = PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
 FSD_THERMO_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl"
@@ -87,6 +90,9 @@ __all__ = [
     "MEGASCALE_CSV",
     "MEGASCALE_PDB_DIR",
     "MEGASCALE_SPLIT_PATH",
+    "MGNIFY_CACHE_PATH",
+    "MGNIFY_CSV",
+    "MGNIFY_PDB_DIR",
     "PACKAGE_ROOT_DIR",
     "PROJECT_ROOT_DIR",
 ]
