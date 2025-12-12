@@ -13,7 +13,7 @@ from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
 from mpnn.env import PROJECT_ROOT_DIR
-from mpnn.model_utils import featurize, loss_nll, loss_smoothed
+from mpnn.model_utils import loss_nll, loss_smoothed
 from mpnn.protein_mpnn import ProteinMPNN
 from mpnn.stability_eval import eval_pretrained_mpnn
 from mpnn.utils import (
@@ -101,25 +101,6 @@ def load_pdb_data(data_path, args):
     valid_cluster_loader = torch.utils.data.DataLoader(
         valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
     )
-
-    if args.debug:
-        first_100_train, first_100_valid = [], []
-        i = 0
-        for x, y in tqdm(
-            zip(train_cluster_loader, valid_cluster_loader),
-            total=100,
-            desc="Loading training and validation data",
-        ):
-            if i >= 100:
-                break
-            if x is not None:
-                first_100_train.append(x)
-            if y is not None:
-                first_100_valid.append(y)
-            i += 1
-
-        train_cluster_loader = first_100_train
-        valid_cluster_loader = first_100_valid
 
     pdb_dict_train = []
     skipped_excluded = 0
@@ -233,26 +214,41 @@ def train(args):
         train_acc = 0.0
         skipped_batches = 0
 
-        for batch_idx, batch in tqdm(
+        for batch_idx, data in tqdm(
             enumerate(pdb_loader_train), total=len(pdb_loader_train), desc="Training Batch"
         ):
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
-                    batch, device
-                )
-                mask_for_loss = mask * chain_M
+                data = data.to(device)  # type: ignore[attr-defined]
+                mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
+                S = data.chain_seq_label.unsqueeze(0)
 
                 if args.mixed_precision:
                     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                         log_probs = model(
-                            X, S, mask, chain_M, residue_idx, chain_encoding_all, batch
+                            data.x,
+                            data.chain_seq_label,
+                            data.mask,
+                            data.chain_mask_all,
+                            data.residue_idx,
+                            data.chain_encoding_all,
+                            data.batch,
                         )
-                        _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
+                        log_probs_3d = log_probs.unsqueeze(0)
+                        _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
                 else:
-                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, batch)
-                    _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
+                    log_probs = model(
+                        data.x,
+                        data.chain_seq_label,
+                        data.mask,
+                        data.chain_mask_all,
+                        data.residue_idx,
+                        data.chain_encoding_all,
+                        data.batch,
+                    )
+                    log_probs_3d = log_probs.unsqueeze(0)
+                    _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
 
                 loss_av_smoothed.backward()
 
@@ -262,7 +258,7 @@ def train(args):
                 optimizer.step()
                 scheduler.step()
 
-                loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
+                loss, _, true_false = loss_nll(S, log_probs_3d, mask_for_loss)
 
                 train_sum += torch.sum(loss * mask_for_loss).float().cpu().data.numpy()
                 train_acc += torch.sum(true_false * mask_for_loss).float().cpu().data.numpy()
@@ -305,18 +301,26 @@ def train(args):
             model.eval()
             validation_sum, validation_weights = 0.0, 0.0
             validation_acc = 0.0
-            for _, batch in tqdm(
+            for _, data in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
-                    batch, device, dtype=torch.float32
-                )
-                mask_for_loss = mask * chain_M
+                data = data.to(device)  # type: ignore[attr-defined]
+                S = data.chain_seq_label.unsqueeze(0)
+                mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
                 with torch.inference_mode():
-                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all)
-                    _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
+                    log_probs = model(
+                        data.x,
+                        data.chain_seq_label,
+                        data.mask,
+                        data.chain_mask_all,
+                        data.residue_idx,
+                        data.chain_encoding_all,
+                        data.batch,
+                    )
+                    log_probs_3d = log_probs.unsqueeze(0)
+                    _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
 
-                loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
+                loss, _, true_false = loss_nll(S, log_probs_3d, mask_for_loss)
 
                 validation_sum += torch.sum(loss * mask_for_loss).float().cpu().data.numpy()
                 validation_acc += torch.sum(true_false * mask_for_loss).float().cpu().data.numpy()

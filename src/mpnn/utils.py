@@ -10,7 +10,9 @@ import numpy as np
 import torch
 import yaml
 from dateutil import parser
+from torch_geometric.data import Batch, Data
 
+from mpnn.model_utils import featurize
 from mpnn.typing_utils import StrPath
 
 P = ParamSpec("P")
@@ -198,6 +200,22 @@ class StructureDataset:
         return self.data[idx]
 
 
+def entry_to_pyg_data(entry: dict) -> Data:
+    """Convert a processed PDB entry dict to a PyG Data object."""
+    X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
+        [entry], device=torch.device("cpu")
+    )
+
+    return Data(
+        x=X[0],
+        chain_seq_label=S[0],
+        mask=mask[0],
+        chain_mask_all=chain_M[0],
+        residue_idx=residue_idx[0],
+        chain_encoding_all=chain_encoding_all[0],
+    )
+
+
 class StructureLoader:
     def __init__(
         self, dataset, batch_size=100, shuffle=True, collate_fn=lambda x: x, drop_last=False
@@ -227,8 +245,11 @@ class StructureLoader:
     def __iter__(self):
         np.random.shuffle(self.clusters)
         for b_idx in self.clusters:
-            batch = [self.dataset[i] for i in b_idx]
-            yield batch
+            entries = [self.dataset[i] for i in b_idx]
+            data_list = [entry_to_pyg_data(e) for e in entries if e is not None]
+            if len(data_list) == 0:
+                continue
+            yield Batch.from_data_list(data_list)  # type: ignore[arg-type]
 
 
 def worker_init_fn(worker_id):
