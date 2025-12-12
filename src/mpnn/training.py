@@ -1,6 +1,7 @@
 import argparse
 import gc
 import os
+import random
 import time
 
 import numpy as np
@@ -8,26 +9,69 @@ import pandas as pd
 import torch
 import wandb
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.types import Device
 from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
-from mpnn.env import PROJECT_ROOT_DIR
+from mpnn.env import (
+    DEFAULT_TRAIN_DATA_PATH,
+    DEFAULT_TRAIN_OUTPUT_DIR,
+    FSD_THERMO_CACHE_PATH,
+    FSD_THERMO_CSV,
+    FSD_THERMO_PDB_DIR,
+    MEGASCALE_CSV,
+    MEGASCALE_PDB_DIR,
+    MEGASCALE_SPLIT_PATH,
+    PROJECT_ROOT_DIR,
+)
 from mpnn.finetune import validation_step
-from mpnn.model_utils import loss_nll, loss_smoothed
+from mpnn.model_utils import (
+    build_training_clusters,
+    loader_pdb,
+)
 from mpnn.protein_mpnn import ProteinMPNN
-from mpnn.stabddg import StaBddG
-from mpnn.stabddg_dataset import MegascaleDataset, ThermoMutDBDataset
-from mpnn.typing_utils import StrPath
-from mpnn.utils import (
+from mpnn.protein_mpnn_dataset import (
     PDBDataset,
     PDBDatasetFlattened,
     StructureDataset,
     StructureLoader,
-    build_training_clusters,
-    enable_tf32_if_available,
-    loader_pdb,
-    worker_init_fn,
 )
+from mpnn.stabddg import StaBddG
+from mpnn.stabddg_dataset import MegascaleDataset, ThermoMutDBDataset
+from mpnn.typing_utils import StrPath
+from mpnn.utils import enable_tf32_if_available
+
+
+def loss_nll(S, log_probs, mask):
+    """Negative log probabilities"""
+    criterion = torch.nn.NLLLoss(reduction="none")
+    loss = criterion(
+        log_probs.contiguous().view(-1, log_probs.size(-1)), S.contiguous().view(-1)
+    ).view(S.size())
+    S_argmaxed = torch.argmax(log_probs, -1)  # [B, L]
+    true_false = S_argmaxed == S
+    loss_av = torch.sum(loss * mask) / torch.sum(mask)
+    return loss, loss_av, true_false
+
+
+def loss_smoothed(S, log_probs, mask, weight=0.1):
+    """Negative log probabilities"""
+    S_onehot = torch.nn.functional.one_hot(S, 21).to(dtype=log_probs.dtype)
+
+    # Label smoothing
+    S_onehot = S_onehot + weight / S_onehot.size(-1)
+    S_onehot = S_onehot / S_onehot.sum(-1, keepdim=True)
+
+    loss = -(S_onehot * log_probs).sum(-1)
+    loss_av = torch.sum(loss * mask) / 2000.0  # fixed
+    return loss, loss_av
+
+
+def worker_init_fn(worker_id):
+    np.random.seed(None)
+    random.seed(None)
+    torch_seed = np.random.randint(0, 2**32 - 1)
+    torch.manual_seed(torch_seed)
 
 
 def get_run_name(args):
@@ -180,16 +224,15 @@ def get_model_and_optimizer(args, device, total_steps):
 def eval_pretrained_mpnn(
     pretrained_model,
     batch_size=10000,
-    device="cuda",
+    device: Device = "cuda",
     mc_samples=20,
     backbone_noise=0.2,
-    megascale_split_path=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
-    megascale_pdb_dir=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
-    megascale_csv=PROJECT_ROOT_DIR
-    / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
-    fsd_thermo_csv=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv",
-    fsd_thermo_pdb_dir=PROJECT_ROOT_DIR / "datasets/FSD/PDBs",
-    fsd_thermo_cache_path=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
+    megascale_split_path=MEGASCALE_SPLIT_PATH,
+    megascale_pdb_dir=MEGASCALE_PDB_DIR,
+    megascale_csv=MEGASCALE_CSV,
+    fsd_thermo_csv=FSD_THERMO_CSV,
+    fsd_thermo_pdb_dir=FSD_THERMO_PDB_DIR,
+    fsd_thermo_cache_path=FSD_THERMO_CACHE_PATH,
 ):
 
     model = StaBddG(
@@ -314,7 +357,7 @@ def train(args):
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                data = data.to(device)  # type: ignore[attr-defined]
+                data = data.to(device)  # type: ignore
                 mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
                 S = data.chain_seq_label.unsqueeze(0)
 
@@ -398,7 +441,7 @@ def train(args):
             for _, data in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                data = data.to(device)  # type: ignore[attr-defined]
+                data = data.to(device)  # type: ignore
                 S = data.chain_seq_label.unsqueeze(0)
                 mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
                 with torch.inference_mode():
@@ -552,13 +595,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--path_for_training_data",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/pdb_2021aug02",
+        default=DEFAULT_TRAIN_DATA_PATH,
         help="path for loading training data",
     )
     argparser.add_argument(
         "--output_dir",
         type=str,
-        default=PROJECT_ROOT_DIR / "checkpoints/train",
+        default=DEFAULT_TRAIN_OUTPUT_DIR,
         help="path for logs and model weights",
     )
     argparser.add_argument(
@@ -661,38 +704,37 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--megascale_split_path",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl",
+        default=MEGASCALE_SPLIT_PATH,
         help="path for megascale split",
     )
     argparser.add_argument(
         "--megascale_pdb_dir",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs",
+        default=MEGASCALE_PDB_DIR,
         help="path for megascale PDBs",
     )
     argparser.add_argument(
         "--megascale_csv",
         type=str,
-        default=PROJECT_ROOT_DIR
-        / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv",
+        default=MEGASCALE_CSV,
         help="path for megascale CSV",
     )
     argparser.add_argument(
         "--fsd_thermo_csv",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv",
+        default=FSD_THERMO_CSV,
         help="path for FSD thermo CSV",
     )
     argparser.add_argument(
         "--fsd_thermo_pdb_dir",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/FSD/PDBs",
+        default=FSD_THERMO_PDB_DIR,
         help="path for FSD thermo PDBs",
     )
     argparser.add_argument(
         "--fsd_thermo_cache_path",
         type=str,
-        default=PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl",
+        default=FSD_THERMO_CACHE_PATH,
         help="path for FSD thermo cache",
     )
 

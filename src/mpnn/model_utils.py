@@ -1,17 +1,24 @@
+import csv
+import os
 import random
 
 import numpy as np
 import torch
+from Bio.PDB.MMCIFParser import MMCIFParser
+from dateutil import parser
+from torch_geometric.data import Data
 
 from mpnn.constants import (
+    AA_3_TO_1,
     AA_3_TO_N,
     AA_ALPHABET,
     BACKBONE_ATOMS,
+    BACKBONE_MAINCHAIN_ATOMS,
     CA_ATOMS,
     CHAIN_ALPHABET,
-    THREE_TO_ONE,
 )
-from mpnn.utils import N_to_AA
+from mpnn.typing_utils import StrPath
+from mpnn.utils import N_to_AA, is_aa
 
 
 def featurize(batch, device):
@@ -148,32 +155,23 @@ def featurize(batch, device):
     return X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all
 
 
-def loss_nll(S, log_probs, mask):
-    """Negative log probabilities"""
-    criterion = torch.nn.NLLLoss(reduction="none")
-    loss = criterion(
-        log_probs.contiguous().view(-1, log_probs.size(-1)), S.contiguous().view(-1)
-    ).view(S.size())
-    S_argmaxed = torch.argmax(log_probs, -1)  # [B, L]
-    true_false = S_argmaxed == S
-    loss_av = torch.sum(loss * mask) / torch.sum(mask)
-    return loss, loss_av, true_false
+def entry_to_pyg_data(entry: dict) -> Data:
+    """Convert a processed PDB entry dict to a PyG Data object."""
+    X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
+        [entry], device=torch.device("cpu")
+    )
+
+    return Data(
+        x=X[0],
+        chain_seq_label=S[0],
+        mask=mask[0],
+        chain_mask_all=chain_M[0],
+        residue_idx=residue_idx[0],
+        chain_encoding_all=chain_encoding_all[0],
+    )
 
 
-def loss_smoothed(S, log_probs, mask, weight=0.1):
-    """Negative log probabilities"""
-    S_onehot = torch.nn.functional.one_hot(S, 21).to(dtype=log_probs.dtype)
-
-    # Label smoothing
-    S_onehot = S_onehot + weight / S_onehot.size(-1)
-    S_onehot = S_onehot / S_onehot.sum(-1, keepdim=True)
-
-    loss = -(S_onehot * log_probs).sum(-1)
-    loss_av = torch.sum(loss * mask) / 2000.0  # fixed
-    return loss, loss_av
-
-
-def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
+def parse_pdb_biounits(x, atoms=BACKBONE_MAINCHAIN_ATOMS, chain=None):
     """input:  x = PDB filename
             atoms = atoms to extract (optional)
     output: (length, atoms, coords=(x,y,z)), sequence
@@ -239,7 +237,7 @@ def parse_PDB_biounits(x, atoms=["N", "CA", "C"], chain=None):
         return "no_chain", "no_chain"
 
 
-def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
+def parse_pdb(pdb_path: StrPath, input_chain_list=None, ca_only=False):
     c = 0
     pdb_dict_list = []
     chain_alphabet = list(CHAIN_ALPHABET)
@@ -247,14 +245,14 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
     if input_chain_list:
         chain_alphabet = input_chain_list
 
-    biounit_names = [path_to_pdb]
+    biounit_names = [pdb_path]
     for biounit in biounit_names:
         my_dict = {}
         s = 0
         concat_seq = ""
         for letter in chain_alphabet:
             sidechain_atoms = CA_ATOMS if ca_only else BACKBONE_ATOMS
-            xyz, seq = parse_PDB_biounits(biounit, atoms=sidechain_atoms, chain=letter)
+            xyz, seq = parse_pdb_biounits(biounit, atoms=sidechain_atoms, chain=letter)
             if type(xyz) != str:
                 concat_seq += seq[0]
                 my_dict["seq_chain_" + letter] = seq[0]
@@ -278,7 +276,7 @@ def parse_PDB(path_to_pdb, input_chain_list=None, ca_only=False):
     return pdb_dict_list
 
 
-def parse_CIF(path_to_cif):
+def parse_cif(cif_path: StrPath):
     """Parse an mmCIF file and return a dict with these keys:
     - seq_chain_<X>    : one-letter sequence for chain X
     - coords_chain_<X> : dict with keys N_chain_X, CA_chain_X, C_chain_X, O_chain_X
@@ -288,7 +286,7 @@ def parse_CIF(path_to_cif):
     - seq              : concatenation of all chain sequences in parsed order
     """
     parser = MMCIFParser(QUIET=True)
-    structure = parser.get_structure("S", path_to_cif)
+    structure = parser.get_structure("S", cif_path)
     model = next(structure.get_models())  # first (and usually only) model
 
     out = {}
@@ -308,9 +306,9 @@ def parse_CIF(path_to_cif):
 
         # walk residues in chain
         for res in chain:
-            if not is_aa(res.get_resname(), standard=True):
+            if not is_aa(res.get_resname()):
                 continue
-            seq.append(THREE_TO_ONE[res.get_resname()])
+            seq.append(AA_3_TO_1[res.get_resname()])
             # for each backbone atom, either grab coords or fill nan
             for atom_name in ("N", "CA", "C", "O"):
                 if atom_name in res:
@@ -330,8 +328,190 @@ def parse_CIF(path_to_cif):
         seq_all.append("".join(seq))
         chain_count += 1
 
-    out["name"] = os.path.splitext(os.path.basename(path_to_cif))[0]
+    out["name"] = os.path.splitext(os.path.basename(cif_path))[0]
     out["num_of_chains"] = chain_count
     out["seq"] = "".join(seq_all)
 
     return out
+
+
+def process_pdb(t):
+    my_dict = {}
+    concat_seq = ""
+    mask_list = []
+    visible_list = []
+    if len(list(np.unique(t["idx"]))) >= 352:
+        return None
+    for idx in list(np.unique(t["idx"])):
+        letter = CHAIN_ALPHABET[idx]
+        res = np.argwhere(t["idx"] == idx)
+        initial_sequence = "".join(list(np.array(list(t["seq"]))[res][0,]))
+        if initial_sequence[-6:] == "HHHHHH":
+            res = res[:, :-6]
+        if initial_sequence[0:6] == "HHHHHH":
+            res = res[:, 6:]
+        if initial_sequence[-7:-1] == "HHHHHH":
+            res = res[:, :-7]
+        if initial_sequence[-8:-2] == "HHHHHH":
+            res = res[:, :-8]
+        if initial_sequence[-9:-3] == "HHHHHH":
+            res = res[:, :-9]
+        if initial_sequence[-10:-4] == "HHHHHH":
+            res = res[:, :-10]
+        if initial_sequence[1:7] == "HHHHHH":
+            res = res[:, 7:]
+        if initial_sequence[2:8] == "HHHHHH":
+            res = res[:, 8:]
+        if initial_sequence[3:9] == "HHHHHH":
+            res = res[:, 9:]
+        if initial_sequence[4:10] == "HHHHHH":
+            res = res[:, 10:]
+        if res.shape[1] < 4:
+            pass
+        else:
+            my_dict["seq_chain_" + letter] = "".join(list(np.array(list(t["seq"]))[res][0,]))
+            concat_seq += my_dict["seq_chain_" + letter]
+            if idx in t["masked"]:
+                mask_list.append(letter)
+            else:
+                visible_list.append(letter)
+            coords_dict_chain = {}
+            all_atoms = np.array(t["xyz"][res,])[0,]  # [L, 14, 3]
+            coords_dict_chain["N_chain_" + letter] = all_atoms[:, 0, :].tolist()
+            coords_dict_chain["CA_chain_" + letter] = all_atoms[:, 1, :].tolist()
+            coords_dict_chain["C_chain_" + letter] = all_atoms[:, 2, :].tolist()
+            coords_dict_chain["O_chain_" + letter] = all_atoms[:, 3, :].tolist()
+            my_dict["coords_chain_" + letter] = coords_dict_chain
+    my_dict["name"] = t["label"]
+    my_dict["masked_list"] = mask_list
+    my_dict["visible_list"] = visible_list
+    my_dict["num_of_chains"] = len(mask_list) + len(visible_list)
+    my_dict["seq"] = concat_seq
+    return my_dict
+
+
+def loader_pdb(item, params):
+    pdbid, chid = item[0].split("_")
+    PREFIX = "%s/pdb/%s/%s" % (params["DIR"], pdbid[1:3], pdbid)
+
+    # load metadata
+    if not os.path.isfile(PREFIX + ".pt"):
+        return {"seq": np.zeros(5)}
+    meta = torch.load(PREFIX + ".pt")
+    asmb_ids = meta["asmb_ids"]
+    asmb_chains = meta["asmb_chains"]
+    chids = np.array(meta["chains"])
+
+    # find candidate assemblies which contain chid chain
+    asmb_candidates = set([a for a, b in zip(asmb_ids, asmb_chains) if chid in b.split(",")])
+
+    # if the chains is missing is missing from all the assemblies
+    # then return this chain alone
+    if len(asmb_candidates) < 1:
+        chain = torch.load("%s_%s.pt" % (PREFIX, chid))
+        L = len(chain["seq"])
+        return {
+            "seq": chain["seq"],
+            "xyz": chain["xyz"],
+            "idx": torch.zeros(L).int(),
+            "masked": torch.Tensor([0]).int(),
+            "label": item[0],
+        }
+
+    # randomly pick one assembly from candidates
+    asmb_i = random.sample(list(asmb_candidates), 1)
+
+    # indices of selected transforms
+    idx = np.where(np.array(asmb_ids) == asmb_i)[0]
+
+    # load relevant chains
+    chains = {
+        c: torch.load("%s_%s.pt" % (PREFIX, c))
+        for i in idx
+        for c in asmb_chains[i]
+        if c in meta["chains"]
+    }
+
+    # generate assembly
+    asmb = {}
+    for k in idx:
+        # pick k-th xform
+        xform = meta["asmb_xform%d" % k]
+        u = xform[:, :3, :3]
+        r = xform[:, :3, 3]
+
+        # select chains which k-th xform should be applied to
+        s1 = set(meta["chains"])
+        s2 = set(asmb_chains[k].split(","))
+        chains_k = s1 & s2
+
+        # transform selected chains
+        for c in chains_k:
+            try:
+                xyz = chains[c]["xyz"]
+                xyz_ru = torch.einsum("bij,raj->brai", u, xyz) + r[:, None, None, :]
+                asmb.update({(c, k, i): xyz_i for i, xyz_i in enumerate(xyz_ru)})
+            except KeyError:
+                return {"seq": np.zeros(5)}
+
+    # select chains which share considerable similarity to chid
+    seqid = meta["tm"][chids == chid][0, :, 1]
+    homo = set([ch_j for seqid_j, ch_j in zip(seqid, chids) if seqid_j > params["HOMO"]])
+    # stack all chains in the assembly together
+    seq, xyz, idx, masked = "", [], [], []
+    seq_list = []
+    for counter, (k, v) in enumerate(asmb.items()):
+        seq += chains[k[0]]["seq"]
+        seq_list.append(chains[k[0]]["seq"])
+        xyz.append(v)
+        idx.append(torch.full((v.shape[0],), counter))
+        if k[0] in homo:
+            masked.append(counter)
+
+    return {
+        "seq": seq,
+        "xyz": torch.cat(xyz, dim=0),
+        "idx": torch.cat(idx, dim=0),
+        "masked": torch.Tensor(masked).int(),
+        "label": item[0],
+    }
+
+
+def build_training_clusters(params):
+    val_ids = set([int(l) for l in open(params["VAL"]).readlines()])
+    test_ids = set([int(l) for l in open(params["TEST"]).readlines()])
+
+    # read & clean list.csv
+    with open(params["LIST"], encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader)
+        rows = [
+            [r[0], r[3], int(r[4])]
+            for r in reader
+            if float(r[2]) <= params["RESCUT"]
+            and parser.parse(r[1]) <= parser.parse(params["DATCUT"])
+        ]
+
+    # compile training and validation sets
+    train = {}
+    valid = {}
+    test = {}
+
+    for r in rows:
+        if r[2] in val_ids:
+            if r[2] in valid:
+                valid[r[2]].append(r[:2])
+            else:
+                valid[r[2]] = [r[:2]]
+        elif r[2] in test_ids:
+            if r[2] in test:
+                test[r[2]].append(r[:2])
+            else:
+                test[r[2]] = [r[:2]]
+        else:
+            if r[2] in train:
+                train[r[2]].append(r[:2])
+            else:
+                train[r[2]] = [r[:2]]
+
+    return train, valid, test

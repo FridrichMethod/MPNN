@@ -8,9 +8,9 @@ from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
 from mpnn.constants import AA_ALPHABET
-from mpnn.model_utils import parse_CIF, parse_PDB
+from mpnn.model_utils import parse_cif, parse_pdb
+from mpnn.protein_mpnn_dataset import StructureDataset
 from mpnn.typing_utils import StrPath
-from mpnn.utils import StructureDataset
 
 
 class FoldingDataset(Dataset):
@@ -93,7 +93,7 @@ class FoldingDataset(Dataset):
         pdb_dir: StrPath = "",
         pdb_dict_cache_path: StrPath = "cache/pdb_dict.pkl",
         cif: bool = False,
-    ) -> dict:
+    ):
 
         file_paths = []
         if cif:
@@ -101,32 +101,32 @@ class FoldingDataset(Dataset):
         else:
             file_paths = [os.path.join(pdb_dir, f"{name}.pdb") for name in self.pdb_names]
 
-        pdb_dict = []
+        pdb_dict_list = []
 
         for path in tqdm(file_paths, desc="Reading in structures"):
             if cif:
-                pdb_dict.append(parse_CIF(path))
+                pdb_dict_list.append(parse_cif(path))
             else:
-                pdb_dict.append(parse_PDB(path)[0])
+                pdb_dict_list.append(parse_pdb(path)[0])
 
-        for dict in pdb_dict:
+        for pdb_dict in pdb_dict_list:
             all_chains = []
-            for key in dict.keys():
+            for key in pdb_dict.keys():
                 if key.startswith("seq_chain_"):
                     all_chains.append(key.split("_")[-1])
-                    dict[key] = "".join([x if x != "-" else "X" for x in dict[key]])
-            dict["seq"] = "".join([x if x != "-" else "X" for x in dict["seq"]])
-            dict["masked_list"] = all_chains
-            dict["visible_list"] = []
+                    pdb_dict[key] = "".join([x if x != "-" else "X" for x in pdb_dict[key]])
+            pdb_dict["seq"] = "".join([x if x != "-" else "X" for x in pdb_dict["seq"]])
+            pdb_dict["masked_list"] = all_chains
+            pdb_dict["visible_list"] = []
 
         cache_dir = os.path.dirname(pdb_dict_cache_path)
         if cache_dir and not os.path.exists(cache_dir):
             os.makedirs(cache_dir, exist_ok=True)
 
         with open(pdb_dict_cache_path, "wb") as f:
-            pickle.dump(pdb_dict, f)
+            pickle.dump(pdb_dict_list, f)
 
-        return pdb_dict
+        return pdb_dict_list
 
     def mutations_to_seq(
         self,
@@ -279,7 +279,7 @@ class MegascaleDataset(Dataset):
             name = name.split(".pdb", 1)[0] + ".pdb"
             name = name.replace("|", ":")
             path = os.path.join(pdb_dir, name)
-            pdb_dict.append(parse_PDB(path)[0])
+            pdb_dict.append(parse_pdb(path)[0])
 
         # Read ddG data
         self.ALPHABET = AA_ALPHABET
