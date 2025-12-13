@@ -476,7 +476,6 @@ if __name__ == "__main__":
     model = EnergyMPNN(
         protein_mpnn=protein_mpnn,
         use_antithetic_variates=not args.no_antithetic_variates,
-        noise_level=args.noise_level,
         device=device,
     )
 

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
 from mpnn.common.constants import AA_ALPHABET
-from mpnn.data.data_utils import parse_cif, parse_pdb
+from mpnn.data.data_utils import entry_to_pyg_data, parse_cif, parse_pdb
 from mpnn.data.protein_mpnn_dataset import StructureDataset
 from mpnn.typing_utils import StrPath
 from mpnn.utils import get_logger
@@ -64,17 +64,20 @@ class FoldingDataset(Dataset):
         for name, group in tqdm(
             grouped_ddG_df, total=len(grouped_ddG_df), desc="Processing mutations"
         ):
-            complex = self.name_to_struct[name]
+            protein_complex = self.name_to_struct[name]
 
             mutations_list = group["mutations"].to_list()
 
-            complex_mut_seqs = self.mutations_to_seq(complex, mutations_list)
+            complex_mut_seqs = self.mutations_to_seq(protein_complex, mutations_list)
 
             ddG = group["ddG"].to_numpy()
 
+            # Convert dictionary to PyG Data object
+            data = entry_to_pyg_data(protein_complex)
+
             self.data.append({
                 "name": name,
-                "complex": complex,
+                "complex": data,
                 "complex_mut_seqs": torch.from_numpy(complex_mut_seqs),
                 "ddG": torch.from_numpy(ddG),
             })

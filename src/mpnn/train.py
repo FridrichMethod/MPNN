@@ -245,7 +245,6 @@ def eval_pretrained_mpnn(
     model = EnergyMPNN(
         protein_mpnn=pretrained_model,
         use_antithetic_variates=True,
-        noise_level=backbone_noise,
         device=device,
     )
     model.eval()
