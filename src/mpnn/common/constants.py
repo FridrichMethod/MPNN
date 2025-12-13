@@ -5,6 +5,7 @@ from typing import Final
 AA_ALPHABET: Final[str] = "ACDEFGHIKLMNPQRSTVWYX"
 CHAIN_ALPHABET: Final[str] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 VOCAB_SIZE: Final[int] = len(AA_ALPHABET)
+MAX_CHAIN_LENGTH: Final[int] = 62
 
 # Amino-acid alphabets and mappings
 AA_1: Final[list[str]] = list(AA_ALPHABET)

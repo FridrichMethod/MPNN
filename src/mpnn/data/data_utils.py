@@ -21,6 +21,7 @@ from mpnn.common.constants import (
     BACKBONE_MAINCHAIN_ATOMS,
     CA_ATOMS,
     CHAIN_ALPHABET,
+    MAX_CHAIN_LENGTH,
     VOCAB_SIZE,
 )
 from mpnn.typing_utils import StrPath
@@ -374,7 +375,7 @@ def process_pdb(t):  # noqa: C901
     concat_seq = ""
     mask_list = []
     visible_list = []
-    if len(list(np.unique(t["idx"]))) >= 352:
+    if len(list(np.unique(t["idx"]))) >= MAX_CHAIN_LENGTH:
         return None
     for idx in list(np.unique(t["idx"])):
         letter = CHAIN_ALPHABET[idx]
