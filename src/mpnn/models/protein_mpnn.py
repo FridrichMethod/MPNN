@@ -257,6 +257,7 @@ class ProteinMPNN(torch.nn.Module):
         vocab_size: int = 21,
         checkpoint_featurize: bool = True,
         use_virtual_center: bool = False,
+        occupancy_cutoff: float | None = None,
     ) -> None:
         """Initialize."""
         super().__init__()
@@ -267,6 +268,7 @@ class ProteinMPNN(torch.nn.Module):
         self.num_rbf = num_rbf
         self.checkpoint_featurize = checkpoint_featurize
         self.use_virtual_center = use_virtual_center
+        self.occupancy_cutoff = occupancy_cutoff
         self.embedding = PositionalEncoding(num_positional_embedding)
 
         # 6 atoms: N, Ca, C, O, Cb, V if use_virtual_center else 5
@@ -280,6 +282,16 @@ class ProteinMPNN(torch.nn.Module):
             torch.nn.LayerNorm(hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         )
+
+        if self.occupancy_cutoff is not None:
+            # Scalar occupancy feature projected to hidden_dim
+            self.occupancy_mlp = torch.nn.Sequential(
+                torch.nn.Linear(1, hidden_dim),
+                torch.nn.GELU(),
+                torch.nn.Linear(hidden_dim, hidden_dim),
+                torch.nn.LayerNorm(hidden_dim),
+            )
+
         self.label_embedding = torch.nn.Embedding(vocab_size, hidden_dim)
         self.encoder_layers = torch.nn.ModuleList([
             Encoder(hidden_dim * 3, hidden_dim, dropout) for _ in range(num_encoder_layers)
@@ -298,12 +310,76 @@ class ProteinMPNN(torch.nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
 
+    def _get_virtual_center(
+        self, Ca: torch.Tensor, Cb: torch.Tensor, N: torch.Tensor
+    ) -> torch.Tensor:
+        """Calculate virtual center coordinates."""
+        l_virtual = 3.06  # 2 * 1.53 Angstrom
+
+        u_bc = Cb - Ca
+        u_bc = u_bc / (torch.norm(u_bc, dim=-1, keepdim=True) + 1e-6)
+
+        u_nc = N - Ca
+        u_nc = u_nc / (torch.norm(u_nc, dim=-1, keepdim=True) + 1e-6)
+
+        n_plane = torch.cross(u_nc, u_bc, dim=-1)
+        n_plane = n_plane / (torch.norm(n_plane, dim=-1, keepdim=True) + 1e-6)
+
+        v_dir = -torch.cross(n_plane, u_bc, dim=-1)
+        V = Ca + l_virtual * v_dir
+        return V
+
+    def _compute_occupancy(
+        self,
+        V: torch.Tensor,
+        valid_mask: torch.Tensor,
+        valid_batch: torch.Tensor,
+        full_size: int,
+        device: torch.device,
+    ) -> torch.Tensor | None:
+        """Compute occupancy feature."""
+        # Occupancy defined by neighbors within occupancy_cutoff (V-V distances)
+        if self.occupancy_cutoff is None:
+            return None
+
+        occ_edge_index = radius_graph(
+            V[valid_mask],
+            r=self.occupancy_cutoff,
+            batch=valid_batch,
+            loop=False,
+            max_num_neighbors=1000,
+        )
+        occ_row, occ_col = occ_edge_index
+
+        valid_V = V[valid_mask]
+
+        V_row = valid_V[occ_row]  # neighbor (j)
+        V_col = valid_V[occ_col]  # target (i)
+
+        d_sq = torch.sum((V_row - V_col) ** 2, dim=-1)
+
+        sigma = self.occupancy_cutoff / 3.0
+        w_j = torch.tensor(1.0, device=device)
+
+        occ_contrib = w_j * torch.exp(-d_sq / (2 * sigma**2))
+
+        occupancy_valid = torch.zeros(V[valid_mask].size(0), device=device)
+        occupancy_valid.scatter_add_(0, occ_col, occ_contrib)
+
+        # Apply log1p normalization to compress dynamic range
+        occupancy_valid = torch.log1p(occupancy_valid)
+
+        # Map back to full size
+        occupancy = torch.zeros(full_size, 1, device=device)
+        occupancy[valid_mask] = occupancy_valid.unsqueeze(-1)
+        return occupancy
+
     def _featurize(
         self,
         x: torch.Tensor,
         mask: torch.Tensor,
         batch: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         N, Ca, C, O = (x[:, i, :] for i in range(4))
         b = Ca - N
         c = C - Ca
@@ -313,20 +389,7 @@ class ProteinMPNN(torch.nn.Module):
         atoms_list = [N, Ca, C, O, Cb]
 
         if self.use_virtual_center:
-            l_virtual = 3.06  # 2 * 1.53 Angstrom
-
-            u_bc = Cb - Ca
-            u_bc = u_bc / (torch.norm(u_bc, dim=-1, keepdim=True) + 1e-6)
-
-            u_nc = N - Ca
-            u_nc = u_nc / (torch.norm(u_nc, dim=-1, keepdim=True) + 1e-6)
-
-            n_plane = torch.cross(u_nc, u_bc, dim=-1)
-            n_plane = n_plane / (torch.norm(n_plane, dim=-1, keepdim=True) + 1e-6)
-
-            v_dir = -torch.cross(n_plane, u_bc, dim=-1)
-
-            V = Ca + l_virtual * v_dir
+            V = self._get_virtual_center(Ca, Cb, N)
             atoms_list.append(V)
 
         valid_mask = mask.bool()
@@ -349,13 +412,23 @@ class ProteinMPNN(torch.nn.Module):
         edge_index_original = torch.stack([original_indices[row], original_indices[col]], dim=0)
         row, col = edge_index_original
 
+        # Calculate occupancy if enabled
+        occupancy = None
+        if self.occupancy_cutoff is not None:
+            # We need V-V distances for occupancy.
+            # If use_virtual_center is True, V is already in atoms_list[-1]
+            # If False, we must compute V temporarily
+            V = atoms_list[-1] if self.use_virtual_center else self._get_virtual_center(Ca, Cb, N)
+
+            occupancy = self._compute_occupancy(V, valid_mask, valid_batch, Ca.size(0), x.device)
+
         rbf_all = []
-        for A, B in list(product(atoms_list, repeat=2)):
+        for A, B in product(atoms_list, repeat=2):
             distances = torch.sqrt(torch.sum((A[row] - B[col]) ** 2, 1) + 1e-6)
             rbf = self._rbf(distances)
             rbf_all.append(rbf)
 
-        return edge_index_original, torch.cat(rbf_all, dim=-1)
+        return edge_index_original, torch.cat(rbf_all, dim=-1), occupancy
 
     def _rbf(self, D: torch.Tensor) -> torch.Tensor:
         D_min, D_max, D_count = 2.0, 22.0, self.num_rbf
@@ -385,7 +458,7 @@ class ProteinMPNN(torch.nn.Module):
             # to enable recomputation without changing forward values and to stay compatible
             # with older PyTorch versions
             x_for_ckpt = x if x.requires_grad else x.detach().requires_grad_(True)
-            edge_index, edge_attr = checkpoint(
+            edge_index, edge_attr, occupancy = checkpoint(
                 self._featurize,
                 x_for_ckpt,
                 mask,
@@ -393,7 +466,7 @@ class ProteinMPNN(torch.nn.Module):
                 use_reentrant=False,
             )
         else:
-            edge_index, edge_attr = self._featurize(x, mask, batch)
+            edge_index, edge_attr, occupancy = self._featurize(x, mask, batch)
 
         row, col = edge_index
         offset = residue_idx[row] - residue_idx[col]
@@ -401,7 +474,10 @@ class ProteinMPNN(torch.nn.Module):
         e_chains = ((chain_encoding_all[row] - chain_encoding_all[col]) == 0).long()
         e_pos = self.embedding(offset, e_chains)
         h_e = self.edge_mlp(torch.cat([edge_attr, e_pos], dim=-1))
+
         h_v = torch.zeros(x.size(0), self.hidden_dim, device=x.device)
+        if self.occupancy_cutoff is not None and occupancy is not None:
+            h_v = h_v + self.occupancy_mlp(occupancy)
 
         # encoder
         for encoder in self.encoder_layers:

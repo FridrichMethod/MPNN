@@ -426,6 +426,13 @@ if __name__ == "__main__":
         help="use virtual center in edge features",
     )
 
+    argparser.add_argument(
+        "--occupancy_cutoff",
+        type=float,
+        default=None,
+        help="cutoff distance for occupancy features (if None, do not use occupancy)",
+    )
+
     args = argparser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -483,6 +490,7 @@ if __name__ == "__main__":
         dropout=0.0,
         augment_eps=0.0,
         use_virtual_center=args.use_virtual_center,
+        occupancy_cutoff=args.occupancy_cutoff,
     )
 
     mpnn_checkpoint = torch.load(args.checkpoint)

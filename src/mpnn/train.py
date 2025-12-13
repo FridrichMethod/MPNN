@@ -212,6 +212,7 @@ def get_model_and_optimizer(args, device: Device, total_steps):
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
         use_virtual_center=args.use_virtual_center,
+        occupancy_cutoff=args.occupancy_cutoff,
     )
     model.to(device)
 
@@ -769,6 +770,12 @@ if __name__ == "__main__":
         "--use_virtual_center",
         action="store_true",
         help="use virtual center in edge features",
+    )
+    argparser.add_argument(
+        "--occupancy_cutoff",
+        type=float,
+        default=None,
+        help="cutoff distance for occupancy features (if None, do not use occupancy)",
     )
     args = argparser.parse_args()
     train(args)
