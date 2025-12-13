@@ -31,11 +31,26 @@ def test_core_dependencies_declared() -> None:
     project = _load_pyproject()["project"]
     dependencies = set(project["dependencies"])
     required = {
+        "biopython",
+        "fire",
+        "hydra-core",
+        "jaxtyping",
+        "jupyter",
+        "matplotlib",
+        "numpy",
+        "pandas",
+        "prody",
+        "python-dateutil",
+        "scipy",
+        "seaborn",
+        "torch-cluster @ https://data.pyg.org/whl/torch-2.8.0+cu128/torch_cluster-1.6.3+pt28cu128-cp312-cp312-linux_x86_64.whl",
         "torch==2.8.0",
         "torch_geometric",
+        "tqdm",
         "transformers",
-        "numpy",
         "typer",
+        "uv",
+        "wandb",
     }
     missing = sorted(required - dependencies)
     assert not missing, f"Missing mandatory dependencies: {missing}"
@@ -44,7 +59,16 @@ def test_core_dependencies_declared() -> None:
 def test_dev_extras_cover_pytest_stack() -> None:
     """Test dev extras cover pytest stack."""
     dev_extras = _load_pyproject()["project"]["optional-dependencies"]["dev"]
-    required = {"pytest", "pytest-cov", "pytest-xdist", "ruff"}
+    required = {
+        "pre-commit",
+        "pytest",
+        "pytest-cov",
+        "pytest-env",
+        "pytest-html",
+        "pytest-timeout",
+        "pytest-xdist",
+        "ruff",
+    }
     missing = sorted(required - set(dev_extras))
     assert not missing, f"Missing dev dependencies: {missing}"
 
