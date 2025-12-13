@@ -68,26 +68,34 @@ def _detect_package_root_dir() -> Path:
 PROJECT_ROOT_DIR = _detect_project_root_dir()
 PACKAGE_ROOT_DIR = _detect_package_root_dir()
 
-DEFAULT_TRAIN_DATA_PATH = PROJECT_ROOT_DIR / "datasets/pdb_2021aug02"
 DEFAULT_TRAIN_OUTPUT_DIR = PROJECT_ROOT_DIR / "checkpoints/train"
 DEFAULT_FINETUNE_OUTPUT_DIR = PROJECT_ROOT_DIR / "checkpoints/finetune"
 
-MEGASCALE_SPLIT_PATH = PROJECT_ROOT_DIR / "datasets/megascale/mega_splits.pkl"
-MEGASCALE_PDB_DIR = PROJECT_ROOT_DIR / "datasets/megascale/AlphaFold_model_PDBs"
-MEGASCALE_CSV = PROJECT_ROOT_DIR / "datasets/megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv"
-MGNIFY_PDB_DIR = PROJECT_ROOT_DIR / "datasets/mgnify/wt_structures"
-MGNIFY_CSV = PROJECT_ROOT_DIR / "datasets/mgnify/mgnify_processed_data.csv"
-MGNIFY_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/mgnify/mgnify.pkl"
-FSD_THERMO_CSV = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.csv"
-FSD_THERMO_PDB_DIR = PROJECT_ROOT_DIR / "datasets/FSD/PDBs"
-FSD_THERMO_CACHE_PATH = PROJECT_ROOT_DIR / "datasets/FSD/fsd_thermo.pkl"
-EXCLUDED_PDBS_CSV = PROJECT_ROOT_DIR / "data/excluded_PDBs.csv"
+DATASETS_DIR = PROJECT_ROOT_DIR / "datasets"
+TRAIN_DATASETS_DIR = DATASETS_DIR / "train"
+FINETUNE_DATASETS_DIR = DATASETS_DIR / "finetune"
+
+TRAIN_DATA_PATH = TRAIN_DATASETS_DIR / "pdb_2021aug02"
+TRAIN_DATA_SAMPLE_PATH = TRAIN_DATASETS_DIR / "pdb_2021aug02_sample"
+EXCLUDED_PDB_CSV = TRAIN_DATASETS_DIR / "excluded_PDBs.csv"
+
+MEGASCALE_SPLIT_PATH = FINETUNE_DATASETS_DIR / "megascale/mega_splits.pkl"
+MEGASCALE_PDB_DIR = FINETUNE_DATASETS_DIR / "megascale/AlphaFold_model_PDBs"
+MEGASCALE_CSV = FINETUNE_DATASETS_DIR / "megascale/Tsuboyama2023_Dataset2_Dataset3_20230416.csv"
+MGNIFY_PDB_DIR = FINETUNE_DATASETS_DIR / "mgnify/wt_structures"
+MGNIFY_CSV = FINETUNE_DATASETS_DIR / "mgnify/mgnify_processed_data.csv"
+MGNIFY_CACHE_PATH = FINETUNE_DATASETS_DIR / "mgnify/mgnify.pkl"
+FSD_THERMO_CSV = FINETUNE_DATASETS_DIR / "FSD/fsd_thermo.csv"
+FSD_THERMO_PDB_DIR = FINETUNE_DATASETS_DIR / "FSD/PDBs"
+FSD_THERMO_CACHE_PATH = FINETUNE_DATASETS_DIR / "FSD/fsd_thermo.pkl"
 
 
 __all__ = [
-    "DEFAULT_TRAIN_DATA_PATH",
+    "DATASETS_DIR",
+    "DEFAULT_FINETUNE_OUTPUT_DIR",
     "DEFAULT_TRAIN_OUTPUT_DIR",
-    "EXCLUDED_PDBS_CSV",
+    "EXCLUDED_PDB_CSV",
+    "FINETUNE_DATASETS_DIR",
     "FSD_THERMO_CACHE_PATH",
     "FSD_THERMO_CSV",
     "FSD_THERMO_PDB_DIR",
@@ -99,4 +107,7 @@ __all__ = [
     "MGNIFY_PDB_DIR",
     "PACKAGE_ROOT_DIR",
     "PROJECT_ROOT_DIR",
+    "TRAIN_DATASETS_DIR",
+    "TRAIN_DATA_PATH",
+    "TRAIN_DATA_SAMPLE_PATH",
 ]

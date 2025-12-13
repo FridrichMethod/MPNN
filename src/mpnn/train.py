@@ -30,15 +30,15 @@ from mpnn.data.data_utils import (
 )
 from mpnn.data.protein_mpnn_dataset import LengthBatchSampler
 from mpnn.env import (
-    DEFAULT_TRAIN_DATA_PATH,
     DEFAULT_TRAIN_OUTPUT_DIR,
-    EXCLUDED_PDBS_CSV,
+    EXCLUDED_PDB_CSV,
     FSD_THERMO_CACHE_PATH,
     FSD_THERMO_CSV,
     FSD_THERMO_PDB_DIR,
     MEGASCALE_CSV,
     MEGASCALE_PDB_DIR,
     MEGASCALE_SPLIT_PATH,
+    TRAIN_DATA_PATH,
 )
 from mpnn.finetune import validation_step
 from mpnn.models import EnergyMPNN, ProteinMPNN
@@ -129,7 +129,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
     excluded_pdbs = []
     if args.exclude_membrane:
-        excluded_pdbs = pd.read_csv(EXCLUDED_PDBS_CSV)["PDB_IDS"].tolist()
+        excluded_pdbs = pd.read_csv(EXCLUDED_PDB_CSV)["PDB_IDS"].tolist()
 
     LOAD_PARAM = {
         "batch_size": 1,
@@ -620,7 +620,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--path_for_training_data",
         type=str,
-        default=DEFAULT_TRAIN_DATA_PATH,
+        default=TRAIN_DATA_PATH,
         help="path for loading training data",
     )
     argparser.add_argument(
