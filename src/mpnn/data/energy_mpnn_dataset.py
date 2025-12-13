@@ -11,6 +11,9 @@ from mpnn.common.constants import AA_ALPHABET
 from mpnn.data.data_utils import parse_cif, parse_pdb
 from mpnn.data.protein_mpnn_dataset import StructureDataset
 from mpnn.typing_utils import StrPath
+from mpnn.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class FoldingDataset(Dataset):
@@ -43,14 +46,14 @@ class FoldingDataset(Dataset):
         # Load cached structure dictionary
         structure_dict = {}
         if os.path.exists(pdb_dict_cache_path):
-            print("Found cached structure dictionary at", pdb_dict_cache_path)
+            logger.info("Found cached structure dictionary at %s", pdb_dict_cache_path)
             with open(pdb_dict_cache_path, "rb") as f:
                 structure_dict = pickle.load(f)
-            print(f"Loaded {len(structure_dict)} structures from cache.")
+            logger.info("Loaded %s structures from cache.", len(structure_dict))
         else:
-            print("Did not find a cached structure dictionary, processing structures now.")
+            logger.info("Did not find a cached structure dictionary, processing structures now.")
             structure_dict = self.preprocess_structures(pdb_dir, pdb_dict_cache_path, cif=cif)
-            print(f"Processed {len(structure_dict)} structures.")
+            logger.info("Processed %s structures.", len(structure_dict))
 
         # Process mutants
         grouped_ddG_df = ddG_df.groupby("#Pdb")
@@ -78,8 +81,10 @@ class FoldingDataset(Dataset):
 
             self.num_mutants += len(mutations_list)
 
-        print(
-            f"Finished loading dataset with {len(self.data)} complexes and {self.num_mutants} mutants."
+        logger.info(
+            "Finished loading dataset with %s complexes and %s mutants.",
+            len(self.data),
+            self.num_mutants,
         )
 
     def __len__(self):
@@ -143,16 +148,13 @@ class FoldingDataset(Dataset):
 
         index_matrix = []
         if "-" in list(processed_struct["seq"]) or "X" in list(processed_struct["seq"]):
-            print(
-                f"Warning: Sequence {processed_struct['name']} contains gaps or unknown residues."
+            logger.warning(
+                "Sequence %s contains gaps or unknown residues.", processed_struct["name"]
             )
 
         for mutations in mutations_list:
             mut_seq = list(processed_struct["seq"])
             for mut in set(mutations):
-                # print(mut)
-                # print(mutations)
-                # print(mutations_list)
                 mut_chain = mut[1]
                 wt_aa = mut[0]
                 mut_aa = mut[-1]

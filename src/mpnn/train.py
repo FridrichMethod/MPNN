@@ -41,7 +41,9 @@ from mpnn.env import (
 from mpnn.finetune import validation_step
 from mpnn.models import EnergyMPNN, ProteinMPNN
 from mpnn.typing_utils import StrPath
-from mpnn.utils import enable_tf32_if_available
+from mpnn.utils import enable_tf32_if_available, get_logger
+
+logger = get_logger(__name__)
 
 
 def loss_nll(S, log_probs, mask):
@@ -132,17 +134,17 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
         "num_workers": min(args.num_workers, os.cpu_count()),
     }
 
-    print("building training clusters")
+    logger.info("building training clusters")
     train, valid, _ = build_training_clusters(params)
 
-    print("loading datasets")
+    logger.info("loading datasets")
 
     train_clusters = PDBDataset(list(train.keys()), loader_pdb, train, params)
-    print(f"number of training clusters: {len(train_clusters)}")
+    logger.info("number of training clusters: %s", len(train_clusters))
     train_cluster_loader = DataLoader(train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
 
     valid_clusters = PDBDataset(list(valid.keys()), loader_pdb, valid, params, flattened=True)
-    print(f"number of validation clusters: {len(valid_clusters)}")
+    logger.info("number of validation clusters: %s", len(valid_clusters))
     valid_cluster_loader = DataLoader(valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
 
     pdb_dict_train = []
@@ -156,7 +158,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
             skipped_excluded += 1
             continue
         pdb_dict_train.append(x)
-    print(f"Skipped {skipped_excluded} excluded PDBs")
+    logger.info("Skipped %s excluded PDBs", skipped_excluded)
 
     pdb_dict_valid = []
     for x in tqdm(
@@ -167,7 +169,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
     if args.max_protein_length > args.batch_size:
         args.max_protein_length = args.batch_size
-        print(
+        logger.warning(
             "max_protein_length must be less than batch_size. Reducing max_protein_length to batch_size."
         )
 
@@ -204,7 +206,7 @@ def get_model_and_optimizer(args, device: Device, total_steps):
     )
     model.to(device)
 
-    print("Total parameters: ", sum(p.numel() for p in model.parameters()))
+    logger.info("Total parameters: %s", sum(p.numel() for p in model.parameters()))
 
     epoch = 0
     optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -319,7 +321,7 @@ def train(args):
         seed_everything(args.seed)
 
     if enable_tf32_if_available():
-        print(f"TF32 is enabled. Precision: {torch.get_float32_matmul_precision()}")
+        logger.info("TF32 is enabled. Precision: %s", torch.get_float32_matmul_precision())
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -328,7 +330,10 @@ def train(args):
         os.path.exists(os.path.join(base_folder, "model_weights", "last_epoch.pt"))
         and not args.force_rerun
     ):
-        print(f"Training run already exists for {run_name}. Use --force_rerun to rerun the model.")
+        logger.warning(
+            "Training run already exists for %s. Use --force_rerun to rerun the model.",
+            run_name,
+        )
         return None
 
     pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs = load_pdb_data(
@@ -401,8 +406,11 @@ def train(args):
             except RuntimeError as err:
                 if "out of memory" in str(err).lower() or "CUDA out of memory" in str(err):
                     skipped_batches += 1
-                    print(
-                        f"WARNING: OOM at step {total_step}, batch {batch_idx}. Skipping batch. ({skipped_batches} skipped so far)"
+                    logger.warning(
+                        "OOM at step %s, batch %s. Skipping batch. (%s skipped so far)",
+                        total_step,
+                        batch_idx,
+                        skipped_batches,
                     )
                     # Clear cache and free memory
                     torch.cuda.empty_cache()
@@ -411,10 +419,13 @@ def train(args):
                 else:
                     # Re-raise if it's not an OOM error
                     skipped_batches += 1
-                    print(
-                        f"WARNING: Error at step {total_step}, batch {batch_idx}. Skipping batch. ({skipped_batches} skipped so far)"
+                    logger.warning(
+                        "Error at step %s, batch %s. Skipping batch. (%s skipped so far)",
+                        total_step,
+                        batch_idx,
+                        skipped_batches,
                     )
-                    print(err)
+                    logger.warning("%s", err)
                     continue
 
         train_loss = train_sum / train_weights
@@ -531,8 +542,13 @@ def train(args):
                 step=total_step,
             )
 
-        print(
-            f"epoch: {e + 1}, step: {total_step}, time: {dt}, train: {train_perplexity_}, skipped_batches: {skipped_batches}"
+        logger.info(
+            "epoch: %s, step: %s, time: %s, train: %s, skipped_batches: %s",
+            e + 1,
+            total_step,
+            dt,
+            train_perplexity_,
+            skipped_batches,
         )
 
         # save model weights
@@ -559,7 +575,7 @@ def train(args):
             torch.save(model_info, checkpoint_filename)
 
         if (e + 1) % args.reload_data_every_n_epochs == 0:
-            print(f"Reloading training data at epoch {e + 1}...")
+            logger.info("Reloading training data at epoch %s...", e + 1)
             pdb_dict_train = []
             skipped_excluded = 0
             for x in tqdm(
@@ -571,7 +587,7 @@ def train(args):
                     skipped_excluded += 1
                     continue
                 pdb_dict_train.append(x)
-            print(f"Skipped {skipped_excluded} excluded PDBs")
+            logger.info("Skipped %s excluded PDBs", skipped_excluded)
             pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
             batch_sampler_train = LengthBatchSampler(
                 pdb_dataset_train.lengths,
@@ -582,7 +598,7 @@ def train(args):
             pdb_loader_train = StructureLoader(pdb_dataset_train, batch_sampler=batch_sampler_train)
 
         if e == args.num_epochs - 1:
-            print("Training complete. Saving model weights...")
+            logger.info("Training complete. Saving model weights...")
             checkpoint_filename = os.path.join(base_folder, "model_weights", "final_epoch.pt")
             torch.save(model_info, checkpoint_filename)
 

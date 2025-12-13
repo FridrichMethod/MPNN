@@ -1,4 +1,5 @@
 import functools
+import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -158,3 +159,16 @@ def parse_amp_dtype(amp_dtype: str | None) -> torch.dtype | None:
             f"Unsupported amp dtype string: {amp_dtype!r}. "
             "Use one of: fp16/float16/half, bf16/bfloat16, fp32/float32/float."
         ) from e
+
+
+def get_logger(name: str | None = None, level: int = logging.INFO) -> logging.Logger:
+    """Return a logger configured for console output at the given level."""
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        )
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    return logger

@@ -11,6 +11,9 @@ from torch_geometric.loader import DataLoader
 
 from mpnn.common.constants import AA_ALPHABET
 from mpnn.data.data_utils import entry_to_pyg_data, process_pdb
+from mpnn.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class PDBDataset(Dataset):
@@ -90,7 +93,7 @@ class StructureDataset(Dataset):
             else:
                 discard_count["bad_chars"] += 1
 
-        print(f"Discarded: {discard_count}")
+        logger.info("Discarded: %s", discard_count)
 
     def __len__(self) -> int:
         """Return number of retained structures."""

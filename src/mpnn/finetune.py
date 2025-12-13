@@ -21,6 +21,9 @@ from mpnn.env import (
     MGNIFY_PDB_DIR,
 )
 from mpnn.models import EnergyMPNN, ProteinMPNN
+from mpnn.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def validation_step(
@@ -194,7 +197,7 @@ def mgnify_train_epoch(
             all_labels.append(ddG.cpu().detach().numpy().flatten())
             train_sum.append(loss.item())
         except Exception as e:
-            print(f"Error in mgnify_train_epoch: {e}")
+            logger.error("Error in mgnify_train_epoch: %s", e)
             continue
 
         num_seqs = 0
@@ -229,7 +232,7 @@ def finetune(
     ddG_loss_fn = torch.nn.MSELoss()
 
     if args.wandb:
-        print("Running zero-shot validation")
+        logger.info("Running zero-shot validation")
         model.eval()
         with torch.no_grad():
             valid_metrics = validation_step(
@@ -468,7 +471,7 @@ if __name__ == "__main__":
         protein_mpnn.load_state_dict(mpnn_checkpoint["model_state_dict"])
     else:
         protein_mpnn.load_state_dict(mpnn_checkpoint)
-    print("Successfully loaded model at", args.checkpoint)
+    logger.info("Successfully loaded model at %s", args.checkpoint)
 
     model = EnergyMPNN(
         protein_mpnn=protein_mpnn,
@@ -482,13 +485,13 @@ if __name__ == "__main__":
 
     # Initialize wandb logging
     if args.wandb:
-        print("Initializing weights and biases.")
+        logger.info("Initializing weights and biases.")
         wandb.init(
             project="finetuning-scaling",
             entity="stanford-protein",
             name=args.run_name,
         )
-        print("Weights and biases intialized.")
+        logger.info("Weights and biases intialized.")
 
     finetune(
         model,
