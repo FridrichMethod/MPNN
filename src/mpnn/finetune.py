@@ -414,6 +414,12 @@ if __name__ == "__main__":
     argparser.add_argument("--embedding_dim", type=int, default=128)
     argparser.add_argument("--num_layers", type=int, default=3)
     argparser.add_argument("--num_neighbors", type=int, default=48)
+    argparser.add_argument(
+        "--edge_cutoff",
+        type=float,
+        default=None,
+        help="cutoff distance for radius graph (if None, use k-nn)",
+    )
 
     args = argparser.parse_args()
 
@@ -468,6 +474,7 @@ if __name__ == "__main__":
         num_encoder_layers=args.num_layers,
         num_decoder_layers=args.num_layers,
         num_neighbors=args.num_neighbors,
+        edge_cutoff=args.edge_cutoff,
         dropout=0.0,
         augment_eps=0.0,
     )

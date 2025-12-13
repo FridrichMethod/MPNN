@@ -7,6 +7,7 @@ python -m mpnn.train \
     --num_encoder_layers 3 \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
+    --edge_cutoff 15 \
     --max_protein_length 10000 \
     --backbone_noise 0.2 \
     --rescut 3.5 \

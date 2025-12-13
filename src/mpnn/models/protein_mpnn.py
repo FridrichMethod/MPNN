@@ -10,7 +10,7 @@ from itertools import product
 import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
-from torch_geometric.nn import knn_graph
+from torch_geometric.nn import knn_graph, radius_graph
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 
@@ -249,6 +249,7 @@ class ProteinMPNN(torch.nn.Module):
         num_encoder_layers: int = 3,
         num_decoder_layers: int = 3,
         num_neighbors: int = 30,
+        edge_cutoff: float | None = None,
         num_rbf: int = 16,
         dropout: float = 0.1,
         augment_eps: float = 0.2,
@@ -261,6 +262,7 @@ class ProteinMPNN(torch.nn.Module):
         self.augment_eps = augment_eps
         self.hidden_dim = hidden_dim
         self.num_neighbors = num_neighbors
+        self.edge_cutoff = edge_cutoff
         self.num_rbf = num_rbf
         self.checkpoint_featurize = checkpoint_featurize
         self.embedding = PositionalEncoding(num_positional_embedding)
@@ -305,7 +307,16 @@ class ProteinMPNN(torch.nn.Module):
         valid_Ca = Ca[valid_mask]
         valid_batch = batch[valid_mask]
 
-        edge_index = knn_graph(valid_Ca, k=self.num_neighbors, batch=valid_batch, loop=True)
+        if self.edge_cutoff is not None:
+            edge_index = radius_graph(
+                valid_Ca,
+                r=self.edge_cutoff,
+                batch=valid_batch,
+                loop=True,
+                max_num_neighbors=1000,
+            )
+        else:
+            edge_index = knn_graph(valid_Ca, k=self.num_neighbors, batch=valid_batch, loop=True)
 
         row, col = edge_index
         original_indices = torch.arange(Ca.size(0), device=x.device)[valid_mask]

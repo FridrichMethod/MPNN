@@ -208,6 +208,7 @@ def get_model_and_optimizer(args, device: Device, total_steps):
         num_encoder_layers=args.num_encoder_layers,
         num_decoder_layers=args.num_encoder_layers,
         num_neighbors=args.num_neighbors,
+        edge_cutoff=args.edge_cutoff,
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
     )
@@ -757,5 +758,11 @@ if __name__ == "__main__":
         help="path for FSD thermo cache",
     )
 
+    argparser.add_argument(
+        "--edge_cutoff",
+        type=float,
+        default=None,
+        help="cutoff distance for radius graph (if None, use k-nn)",
+    )
     args = argparser.parse_args()
     train(args)
