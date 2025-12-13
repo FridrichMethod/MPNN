@@ -1,3 +1,5 @@
+"""Finetuning script for MPNN."""
+
 import argparse
 import os
 
@@ -34,6 +36,7 @@ def validation_step(
     mc_samples=20,
     device: Device = "cuda",
 ):
+    """Run a validation step."""
     val_spearman = []
     val_pearson = []
     all_pred = []
@@ -97,6 +100,7 @@ def train_epoch(
     batch_size=10000,
     device: Device = "cuda",
 ):
+    """Run a training epoch."""
     train_sum = []
     all_pred = []
     all_labels = []
@@ -158,6 +162,7 @@ def mgnify_train_epoch(
     batch_size=10000,
     device: Device = "cuda",
 ):
+    """Run a training epoch on Mgnify dataset."""
     model.train()
 
     all_pred = []
@@ -216,7 +221,7 @@ def mgnify_train_epoch(
     }
 
 
-def finetune(
+def finetune(  # noqa: C901
     model,
     megascale_train,
     megascale_valid,
@@ -227,6 +232,7 @@ def finetune(
     batch_size=10000,
     device: Device = "cuda",
 ):
+    """Finetune the model."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs)
     ddG_loss_fn = torch.nn.MSELoss()
@@ -467,7 +473,7 @@ if __name__ == "__main__":
     )
 
     mpnn_checkpoint = torch.load(args.checkpoint)
-    if "model_state_dict" in mpnn_checkpoint.keys():
+    if "model_state_dict" in mpnn_checkpoint:
         protein_mpnn.load_state_dict(mpnn_checkpoint["model_state_dict"])
     else:
         protein_mpnn.load_state_dict(mpnn_checkpoint)

@@ -47,7 +47,8 @@ def is_aa(x: str) -> bool:
     return x in AA_ALPHABET
 
 
-def featurize(batch, device: Device = None):
+def featurize(batch, device: Device = None):  # noqa: C901
+    """Featurize a batch of protein data."""
     B = len(batch)
     lengths = np.array([len(b["seq"]) for b in batch], dtype=np.int32)  # sum of chain seq lengths
     L_max = max([len(b["seq"]) for b in batch])
@@ -198,47 +199,50 @@ def entry_to_pyg_data(entry: dict) -> Data:
     )
 
 
-def parse_pdb_biounits(x, atoms=BACKBONE_MAINCHAIN_ATOMS, chain=None):
-    """input:  x = PDB filename
+def parse_pdb_biounits(x, atoms=BACKBONE_MAINCHAIN_ATOMS, chain=None):  # noqa: C901
+    """Parse PDB file and extract coordinates and sequence.
+
+    input:  x = PDB filename
             atoms = atoms to extract (optional)
     output: (length, atoms, coords=(x,y,z)), sequence
     """
     xyz, seq, min_resn, max_resn = {}, {}, 1e6, -1e6
-    for line in open(x, "rb"):
-        line = line.decode("utf-8", "ignore").rstrip()
+    with open(x, "rb") as f:
+        for line_raw in f:
+            line = line_raw.decode("utf-8", "ignore").rstrip()
 
-        if line[:6] == "HETATM" and line[17 : 17 + 3] == "MSE":
-            line = line.replace("HETATM", "ATOM  ")
-            line = line.replace("MSE", "MET")
+            if line[:6] == "HETATM" and line[17 : 17 + 3] == "MSE":
+                line = line.replace("HETATM", "ATOM  ")
+                line = line.replace("MSE", "MET")
 
-        if line[:4] == "ATOM":
-            ch = line[21:22]
-            if ch == chain or chain is None:
-                atom = line[12 : 12 + 4].strip()
-                resi = line[17 : 17 + 3]
-                resn = line[22 : 22 + 5].strip()
-                x, y, z = [float(line[i : (i + 8)]) for i in [30, 38, 46]]
+            if line[:4] == "ATOM":
+                ch = line[21:22]
+                if ch == chain or chain is None:
+                    atom = line[12 : 12 + 4].strip()
+                    resi = line[17 : 17 + 3]
+                    resn = line[22 : 22 + 5].strip()
+                    x, y, z = [float(line[i : (i + 8)]) for i in [30, 38, 46]]
 
-                if resn[-1].isalpha():
-                    resa, resn = resn[-1], int(resn[:-1]) - 1
-                else:
-                    resa, resn = "", int(resn) - 1
+                    if resn[-1].isalpha():
+                        resa, resn = resn[-1], int(resn[:-1]) - 1
+                    else:
+                        resa, resn = "", int(resn) - 1
 
-                if resn < min_resn:
-                    min_resn = resn
-                if resn > max_resn:
-                    max_resn = resn
-                if resn not in xyz:
-                    xyz[resn] = {}
-                if resa not in xyz[resn]:
-                    xyz[resn][resa] = {}
-                if resn not in seq:
-                    seq[resn] = {}
-                if resa not in seq[resn]:
-                    seq[resn][resa] = resi
+                    if resn < min_resn:
+                        min_resn = resn
+                    if resn > max_resn:
+                        max_resn = resn
+                    if resn not in xyz:
+                        xyz[resn] = {}
+                    if resa not in xyz[resn]:
+                        xyz[resn][resa] = {}
+                    if resn not in seq:
+                        seq[resn] = {}
+                    if resa not in seq[resn]:
+                        seq[resn][resa] = resi
 
-                if atom not in xyz[resn][resa]:
-                    xyz[resn][resa][atom] = np.array([x, y, z])
+                    if atom not in xyz[resn][resa]:
+                        xyz[resn][resa][atom] = np.array([x, y, z])
 
     # convert to numpy arrays, fill in missing values
     seq_, xyz_ = [], []
@@ -257,7 +261,7 @@ def parse_pdb_biounits(x, atoms=BACKBONE_MAINCHAIN_ATOMS, chain=None):
                         else:
                             xyz_.append(np.full(3, np.nan))
             else:
-                for atom in atoms:
+                for _ in atoms:
                     xyz_.append(np.full(3, np.nan))
         return np.array(xyz_).reshape(-1, len(atoms), 3), N_to_AA(np.array(seq_))
     except TypeError:
@@ -265,6 +269,7 @@ def parse_pdb_biounits(x, atoms=BACKBONE_MAINCHAIN_ATOMS, chain=None):
 
 
 def parse_pdb(pdb_path: StrPath, input_chain_list=None, ca_only=False):
+    """Parse a PDB file."""
     c = 0
     pdb_dict_list = []
     chain_alphabet = list(CHAIN_ALPHABET)
@@ -280,7 +285,7 @@ def parse_pdb(pdb_path: StrPath, input_chain_list=None, ca_only=False):
         for letter in chain_alphabet:
             sidechain_atoms = CA_ATOMS if ca_only else BACKBONE_ATOMS
             xyz, seq = parse_pdb_biounits(biounit, atoms=sidechain_atoms, chain=letter)
-            if type(xyz) != str:
+            if not isinstance(xyz, str):
                 concat_seq += seq[0]
                 my_dict["seq_chain_" + letter] = seq[0]
                 coords_dict_chain = {}
@@ -304,7 +309,8 @@ def parse_pdb(pdb_path: StrPath, input_chain_list=None, ca_only=False):
 
 
 def parse_cif(cif_path: StrPath):
-    """Parse an mmCIF file and return a dict with these keys:
+    """Parse an mmCIF file and return a dict with these keys.
+
     - seq_chain_<X>    : one-letter sequence for chain X
     - coords_chain_<X> : dict with keys N_chain_X, CA_chain_X, C_chain_X, O_chain_X
                          each mapping to a list of [x,y,z]
@@ -322,7 +328,7 @@ def parse_cif(cif_path: StrPath):
 
     for chain in model:
         cid = chain.id
-        # prepare per‐chain containers
+        # prepare per-chain containers
         seq = []
         coords = {
             f"N_chain_{cid}": [],
@@ -362,7 +368,8 @@ def parse_cif(cif_path: StrPath):
     return out
 
 
-def process_pdb(t):
+def process_pdb(t):  # noqa: C901
+    """Process PDB data."""
     my_dict = {}
     concat_seq = ""
     mask_list = []
@@ -418,8 +425,9 @@ def process_pdb(t):
 
 
 def loader_pdb(item, params):
+    """Load PDB data."""
     pdbid, chid = item[0].split("_")
-    PREFIX = "%s/pdb/%s/%s" % (params["DIR"], pdbid[1:3], pdbid)
+    PREFIX = f"{params['DIR']}/pdb/{pdbid[1:3]}/{pdbid}"
 
     # load metadata
     if not os.path.isfile(PREFIX + ".pt"):
@@ -435,7 +443,7 @@ def loader_pdb(item, params):
     # if the chains is missing is missing from all the assemblies
     # then return this chain alone
     if len(asmb_candidates) < 1:
-        chain = torch.load("%s_%s.pt" % (PREFIX, chid))
+        chain = torch.load(f"{PREFIX}_{chid}.pt")
         L = len(chain["seq"])
         return {
             "seq": chain["seq"],
@@ -453,7 +461,7 @@ def loader_pdb(item, params):
 
     # load relevant chains
     chains = {
-        c: torch.load("%s_%s.pt" % (PREFIX, c))
+        c: torch.load(f"{PREFIX}_{c}.pt")
         for i in idx
         for c in asmb_chains[i]
         if c in meta["chains"]
@@ -463,7 +471,7 @@ def loader_pdb(item, params):
     asmb = {}
     for k in idx:
         # pick k-th xform
-        xform = meta["asmb_xform%d" % k]
+        xform = meta[f"asmb_xform{k}"]
         u = xform[:, :3, :3]
         r = xform[:, :3, 3]
 
@@ -505,8 +513,11 @@ def loader_pdb(item, params):
 
 
 def build_training_clusters(params):
-    val_ids = set([int(l) for l in open(params["VAL"]).readlines()])
-    test_ids = set([int(l) for l in open(params["TEST"]).readlines()])
+    """Build training clusters."""
+    with open(params["VAL"], encoding="utf-8") as f:
+        val_ids = set([int(l) for l in f.readlines()])
+    with open(params["TEST"], encoding="utf-8") as f:
+        test_ids = set([int(l) for l in f.readlines()])
 
     # read & clean list.csv
     with open(params["LIST"], encoding="utf-8") as f:

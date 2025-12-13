@@ -1,3 +1,5 @@
+"""Energy MPNN dataset module."""
+
 import os
 import pickle
 
@@ -17,6 +19,8 @@ logger = get_logger(__name__)
 
 
 class FoldingDataset(Dataset):
+    """Dataset for folding experiments."""
+
     def __init__(
         self,
         csv_path: StrPath,
@@ -26,7 +30,7 @@ class FoldingDataset(Dataset):
         cif: bool = False,  # whether to use cif files instead of pdb files
         alphabet: str = AA_ALPHABET,
     ):
-
+        """Initialize the dataset."""
         self.alphabet = alphabet
         self.data = []
         self.num_mutants = 0
@@ -91,9 +95,11 @@ class FoldingDataset(Dataset):
         )
 
     def __len__(self):
+        """Return the length of the dataset."""
         return len(self.data)
 
     def __getitem__(self, idx):
+        """Get an item from the dataset."""
         return self.data[idx]
 
     def preprocess_structures(
@@ -102,7 +108,7 @@ class FoldingDataset(Dataset):
         pdb_dict_cache_path: StrPath = "cache/pdb_dict.pkl",
         cif: bool = False,
     ):
-
+        """Preprocess PDB/CIF structures."""
         file_paths = []
         if cif:
             file_paths = [os.path.join(pdb_dir, f"{name}.cif") for name in self.pdb_names]
@@ -119,7 +125,7 @@ class FoldingDataset(Dataset):
 
         for pdb_dict in pdb_dict_list:
             all_chains = []
-            for key in pdb_dict.keys():
+            for key in pdb_dict:
                 if key.startswith("seq_chain_"):
                     all_chains.append(key.split("_")[-1])
                     pdb_dict[key] = "".join([x if x != "-" else "X" for x in pdb_dict[key]])
@@ -141,7 +147,7 @@ class FoldingDataset(Dataset):
         processed_struct: dict,
         mutations_list: list,
     ) -> np.ndarray:
-
+        """Convert mutations to sequence indices."""
         chain_offset = {}
         offset = 0
         for key in processed_struct:
@@ -185,11 +191,13 @@ class FoldingDataset(Dataset):
         return index_matrix
 
     def preprocess_df(self, csv_path) -> pd.DataFrame:
-
-        raise NotImplementedError("")
+        """Preprocess the dataframe."""
+        raise NotImplementedError()
 
 
 class ThermoMutDBDataset(FoldingDataset):
+    """ThermoMutDB dataset."""
+
     def __init__(
         self,
         csv_path: StrPath,
@@ -199,9 +207,11 @@ class ThermoMutDBDataset(FoldingDataset):
         cif: bool = False,
         alphabet: str = AA_ALPHABET,
     ):
+        """Initialize the dataset."""
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
     def preprocess_df(self, csv_path):
+        """Preprocess the dataframe."""
         df = pd.read_csv(csv_path)
         df["mutations"] = df["Mutation(s)_cleaned"].astype(str)
         df["mutations"] = df["mutations"].str.split(",")
@@ -212,6 +222,8 @@ class ThermoMutDBDataset(FoldingDataset):
 
 
 class MgnifyDataset(FoldingDataset):
+    """Mgnify dataset."""
+
     def __init__(
         self,
         csv_path: StrPath,
@@ -221,9 +233,11 @@ class MgnifyDataset(FoldingDataset):
         cif: bool = False,
         alphabet: str = AA_ALPHABET,
     ):
+        """Initialize the dataset."""
         super().__init__(csv_path, split_path, pdb_dir, pdb_dict_cache_path, cif, alphabet)
 
     def preprocess_df(self, csv_path):
+        """Preprocess the dataframe."""
         df = pd.read_csv(csv_path)
         df["mutations"] = df["mutations"].astype(str)
         df["mutations"] = df["mutations"].str.split(",")
@@ -238,19 +252,26 @@ class MgnifyDataset(FoldingDataset):
 
 
 class MgnifyBatchedDatset(Dataset):
+    """Batched Mgnify dataset."""
+
     def __init__(self, mgnify_dataset, batch_size=10000):
+        """Initialize the dataset."""
         self.mgnify_dataset = mgnify_dataset
         self.batch_size = batch_size
 
     def __len__(self):
+        """Return the length of the dataset."""
         return len(self.mgnify_dataset)
 
     def __getitem__(self, idx):
+        """Get an item from the dataset."""
         return self.mgnify_dataset[idx]
 
 
 class MegascaleDataset(Dataset):
-    """Note that the Megascale dataset is handled differently from other datasets due to naming issues.
+    """Megascale dataset.
+
+    Note that the Megascale dataset is handled differently from other datasets due to naming issues.
     This is non-standard and therefore does not inherit from the base FoldingDataset class.
     """
 
@@ -261,6 +282,7 @@ class MegascaleDataset(Dataset):
         split_path: StrPath = "",
         split: str = "",
     ):
+        """Initialize the dataset."""
         # Read split files
         complex_names = None
         with open(split_path, "rb") as f:
@@ -278,8 +300,8 @@ class MegascaleDataset(Dataset):
                 complex_names = train_names + val_names + test_names
 
         pdb_dict = []
-        for name in tqdm(complex_names, desc="Loading dataset"):
-            name = name.split(".pdb", 1)[0] + ".pdb"
+        for name_path in tqdm(complex_names, desc="Loading dataset"):
+            name = name_path.split(".pdb", 1)[0] + ".pdb"
             name = name.replace("|", ":")
             path = os.path.join(pdb_dir, name)
             pdb_dict.append(parse_pdb(path)[0])
@@ -320,17 +342,18 @@ class MegascaleDataset(Dataset):
             self.ddG_data[name]["ddG"] = torch.tensor(mut_df["ddG"])
 
         # Mask all input chains
-        for dict in pdb_dict:
-            dict["masked_list"] = ["A"]
-            dict["visible_list"] = []
+        for d in pdb_dict:
+            d["masked_list"] = ["A"]
+            d["visible_list"] = []
 
         self.structure_data = StructureDataset(pdb_dict)
 
     def __len__(self):
+        """Return the length of the dataset."""
         return len(self.structure_data)
 
     def __getitem__(self, idx):
-
+        """Get an item from the dataset."""
         protein_complex = self.structure_data[idx]
         pdb_name = protein_complex["name"]
         complex_mut_seqs = self.ddG_data[f"{pdb_name}.pdb"]["mut_seqs"]

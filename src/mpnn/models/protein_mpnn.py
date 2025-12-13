@@ -44,7 +44,10 @@ def build_autoregressive_mask(
 
 
 class PositionWiseFeedForward(torch.nn.Module):
+    """Position wise feed forward network."""
+
     def __init__(self, in_channels: int, hidden_channels: int) -> None:
+        """Initialize."""
         super().__init__()
         self.out = torch.nn.Sequential(
             torch.nn.Linear(in_channels, hidden_channels),
@@ -53,16 +56,21 @@ class PositionWiseFeedForward(torch.nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass."""
         return self.out(x)
 
 
 class PositionalEncoding(torch.nn.Module):
+    """Positional encoding."""
+
     def __init__(self, hidden_channels: int, max_relative_feature: int = 32) -> None:
+        """Initialize."""
         super().__init__()
         self.max_relative_feature = max_relative_feature
         self.emb = torch.nn.Embedding(2 * max_relative_feature + 2, hidden_channels)
 
     def forward(self, offset, mask) -> torch.Tensor:
+        """Forward pass."""
         d = torch.clip(
             offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
         ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
@@ -70,6 +78,8 @@ class PositionalEncoding(torch.nn.Module):
 
 
 class Encoder(MessagePassing):
+    """Encoder layer."""
+
     def __init__(
         self,
         in_channels: int,
@@ -77,6 +87,7 @@ class Encoder(MessagePassing):
         dropout: float = 0.1,
         scale: float = 30,
     ) -> None:
+        """Initialize."""
         super().__init__()
         self.out_v = torch.nn.Sequential(
             torch.nn.Linear(in_channels, hidden_channels),
@@ -107,6 +118,7 @@ class Encoder(MessagePassing):
         edge_index: torch.Tensor,
         edge_attr: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # NOTE: bug fixed here
+        """Forward pass."""
         # x: [N, d_v]
         # edge_index: [2, E]
         # edge_attr: [E, d_e]
@@ -127,12 +139,15 @@ class Encoder(MessagePassing):
     def message(
         self, x_i: torch.Tensor, x_j: torch.Tensor, edge_attr: torch.Tensor
     ) -> torch.Tensor:
+        """Message passing."""
         h = torch.cat([x_i, x_j, edge_attr], dim=-1)  # [E, 2*d_v + d_e]
         h = self.out_v(h)  # [E, d_e]  # NOTE: bug fixed here
         return h
 
 
 class Decoder(MessagePassing):
+    """Decoder layer."""
+
     def __init__(
         self,
         in_channels: int,
@@ -140,6 +155,7 @@ class Decoder(MessagePassing):
         dropout: float = 0.1,
         scale: float = 30,
     ) -> None:
+        """Initialize."""
         super().__init__()
         self.out_v = torch.nn.Sequential(
             torch.nn.Linear(in_channels, hidden_channels),
@@ -163,6 +179,7 @@ class Decoder(MessagePassing):
         x_label: torch.Tensor,
         mask: torch.Tensor,
     ) -> torch.Tensor:
+        """Forward pass."""
         # x: [N, d_v]
         # edge_index: [2, E]
         # edge_attr: [E, d_e]
@@ -183,6 +200,7 @@ class Decoder(MessagePassing):
         edge_attr: torch.Tensor,
         mask: torch.Tensor,
     ) -> torch.Tensor:
+        """Message passing."""
         h_1 = torch.cat([x_j, edge_attr, x_label_j], dim=-1)
         h_0 = torch.cat([x_j, edge_attr, torch.zeros_like(x_label_j)], dim=-1)
         h = h_1 * mask + h_0 * (1 - mask)
@@ -192,9 +210,9 @@ class Decoder(MessagePassing):
 
 
 class ProteinMPNN(torch.nn.Module):
-    r"""The ProteinMPNN model from the `"Robust deep learning--based
-    protein sequence design using ProteinMPNN"
-    <https://www.biorxiv.org/content/10.1101/2022.06.03.494563v1>`_ paper.
+    r"""The ProteinMPNN model.
+
+    From the `"Robust deep learning--based protein sequence design using ProteinMPNN" <https://www.biorxiv.org/content/10.1101/2022.06.03.494563v1>`_ paper.
 
     Args:
         hidden_dim (int): Hidden channels.
@@ -215,6 +233,8 @@ class ProteinMPNN(torch.nn.Module):
             (default: :obj:`16`)
         vocab_size (int): Number of vocabulary.
             (default: :obj:`21`)
+        checkpoint_featurize (bool): Checkpoint featurize.
+            (default: :obj:`True`)
 
     .. note::
         For an example of using :class:`ProteinMPNN`, see
@@ -236,6 +256,7 @@ class ProteinMPNN(torch.nn.Module):
         vocab_size: int = 21,
         checkpoint_featurize: bool = True,
     ) -> None:
+        """Initialize."""
         super().__init__()
         self.augment_eps = augment_eps
         self.hidden_dim = hidden_dim
@@ -263,6 +284,7 @@ class ProteinMPNN(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        """Reset parameters."""
         for p in self.parameters():
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
@@ -317,6 +339,7 @@ class ProteinMPNN(torch.nn.Module):
         chain_encoding_all: torch.Tensor,
         batch: torch.Tensor,
     ) -> torch.Tensor:
+        """Forward pass."""
         if self.training and self.augment_eps > 0:
             x = x + self.augment_eps * torch.randn_like(x)
 

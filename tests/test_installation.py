@@ -1,3 +1,5 @@
+"""Test installation."""
+
 from __future__ import annotations
 
 import importlib
@@ -14,6 +16,7 @@ def _load_pyproject() -> dict:
 
 
 def test_project_metadata_matches_pyproject() -> None:
+    """Test project metadata matches pyproject."""
     project = _load_pyproject()["project"]
     assert project["name"] == "mpnn"
     assert project["requires-python"] == ">=3.12"
@@ -24,6 +27,7 @@ def test_project_metadata_matches_pyproject() -> None:
 
 
 def test_core_dependencies_declared() -> None:
+    """Test core dependencies declared."""
     project = _load_pyproject()["project"]
     dependencies = set(project["dependencies"])
     required = {
@@ -38,6 +42,7 @@ def test_core_dependencies_declared() -> None:
 
 
 def test_dev_extras_cover_pytest_stack() -> None:
+    """Test dev extras cover pytest stack."""
     dev_extras = _load_pyproject()["project"]["optional-dependencies"]["dev"]
     required = {"pytest", "pytest-cov", "pytest-xdist", "ruff"}
     missing = sorted(required - set(dev_extras))
@@ -45,6 +50,7 @@ def test_dev_extras_cover_pytest_stack() -> None:
 
 
 def test_dynamic_version_attr_points_to_package_version() -> None:
+    """Test dynamic version attr points to package version."""
     config = _load_pyproject()
     attr_path = config["tool"]["setuptools"]["dynamic"]["version"]["attr"]
     module_path, _, attribute = attr_path.partition(".")

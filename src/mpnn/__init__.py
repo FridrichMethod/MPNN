@@ -1,3 +1,3 @@
-"""CS224W final project"""
+"""CS224W final project."""
 
 __version__ = "0.1.0"

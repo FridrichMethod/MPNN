@@ -1,17 +1,26 @@
+"""Energy MPNN model module."""
+
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.types import Device
-from torch_geometric.data import Batch
+from torch_geometric.data import Batch, Data
+
+from mpnn.models.protein_mpnn import ProteinMPNN
 
 
 class EnergyMPNN(nn.Module):
+    """Energy-based MPNN model."""
+
     def __init__(
         self,
-        protein_mpnn,
-        use_antithetic_variates=True,
+        protein_mpnn: ProteinMPNN,
+        use_antithetic_variates: bool = True,
         device: Device = "cuda",
-    ):
+    ) -> None:
+        """Initialize the model."""
         super().__init__()
         self.protein_mpnn = protein_mpnn
         self.use_antithetic_variates = (
@@ -19,7 +28,7 @@ class EnergyMPNN(nn.Module):
         )
         self.device = device
 
-    def folding_dG(self, domain, seqs):
+    def folding_dG(self, domain: Data, seqs: torch.Tensor) -> torch.Tensor:
         """Predicts the folding stability (dG) for a list of sequences."""
         B = seqs.shape[0]
 
@@ -46,7 +55,9 @@ class EnergyMPNN(nn.Module):
 
         return dG
 
-    def folding_ddG(self, domain, mut_seqs, wt_seq=None):
+    def folding_ddG(
+        self, domain: Data, mut_seqs: torch.Tensor, wt_seq: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Predicts the folding ddG."""
         if wt_seq is None:
             wt_seq = domain.chain_seq_label.unsqueeze(0)
@@ -58,8 +69,11 @@ class EnergyMPNN(nn.Module):
         # use the convention that a negative value (ddG < 0) represents a stabilizing mutation.
         return -ddG
 
-    def folding_dG_batched(self, domain_list, seqs_list):
+    def folding_dG_batched(
+        self, domain_list: list[Data], seqs_list: list[torch.Tensor]
+    ) -> torch.Tensor:
         """Batched version of the folding_dG function, with multiple complexes and mutated sequences.
+
         domain_list: list of Data objects
         seqs_list: list of tensors [Mi, Li]
         decoding_order: list of tensors [Li]
@@ -90,7 +104,9 @@ class EnergyMPNN(nn.Module):
 
         return dG
 
-    def folding_ddG_batched(self, domain_list, mut_seqs_list):
+    def folding_ddG_batched(
+        self, domain_list: list[Data], mut_seqs_list: list[torch.Tensor]
+    ) -> torch.Tensor:
         """Batched version of the folding_ddG function, with multiple complexes and mutated sequences."""
         wt_seq_list = [domain.chain_seq_label.unsqueeze(0) for domain in domain_list]
 
@@ -107,15 +123,16 @@ class EnergyMPNN(nn.Module):
 
     def binding_ddG(
         self,
-        protein_complex,
-        binder1,
-        binder2,
-        complex_mut_seqs,
-        binder1_mut_seqs,
-        binder2_mut_seqs,
-    ):
-        """We calculate the binding ddG by decomposing it into three folding ddG terms,
-        corresponding to the entire complex and each individual binders.
+        protein_complex: Data,
+        binder1: Data,
+        binder2: Data,
+        complex_mut_seqs: torch.Tensor,
+        binder1_mut_seqs: torch.Tensor,
+        binder2_mut_seqs: torch.Tensor,
+    ) -> torch.Tensor:
+        """We calculate the binding ddG by decomposing it into three folding ddG terms.
+
+        Corresponding to the entire complex and each individual binders.
         """
         complex_ddG_fold = self.folding_ddG(protein_complex, complex_mut_seqs)
         binder1_ddG_fold = self.folding_ddG(binder1, binder1_mut_seqs)

@@ -1,3 +1,5 @@
+"""Environment detection module."""
+
 import atexit
 import os
 import subprocess
@@ -13,7 +15,7 @@ atexit.register(_PACKAGE_ROOT_DIR_EXIT_STACK.close)
 
 
 def _detect_project_root_dir() -> Path:
-    """Determine the project root directory with the following priority:
+    """Determine the project root directory with the following priority.
 
     1) Explicit environment variable PROJECT_ROOT_DIR
     2) Search upward from current file for directory containing pyproject.toml

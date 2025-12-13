@@ -1,3 +1,5 @@
+"""Training script."""
+
 import argparse
 import gc
 import os
@@ -47,7 +49,7 @@ logger = get_logger(__name__)
 
 
 def loss_nll(S, log_probs, mask):
-    """Negative log probabilities"""
+    """Negative log probabilities."""
     criterion = torch.nn.NLLLoss(reduction="none")
     loss = criterion(
         log_probs.contiguous().view(-1, log_probs.size(-1)), S.contiguous().view(-1)
@@ -59,7 +61,7 @@ def loss_nll(S, log_probs, mask):
 
 
 def loss_smoothed(S, log_probs, mask, weight=0.1):
-    """Negative log probabilities"""
+    """Negative log probabilities."""
     S_onehot = torch.nn.functional.one_hot(S, 21).to(dtype=log_probs.dtype)
 
     # Label smoothing
@@ -72,6 +74,7 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
 
 
 def worker_init_fn(worker_id):
+    """Initialize worker."""
     np.random.seed(None)
     random.seed(None)
     torch_seed = np.random.randint(0, 2**32 - 1)
@@ -79,10 +82,12 @@ def worker_init_fn(worker_id):
 
 
 def get_run_name(args):
+    """Get run name."""
     return f"{args.code_version}_h{args.hidden_dim}_l{args.num_encoder_layers}_n{args.num_neighbors}_lr{args.learning_rate}_e{args.num_epochs}_wd{args.weight_decay}_bs{args.batch_size}_bb{args.backbone_noise}_s{args.seed}"
 
 
 def setup_run(args):
+    """Set up run."""
     run_name, tags = None, None
     if args.run_name:
         run_name = args.run_name
@@ -99,13 +104,14 @@ def setup_run(args):
 
     logfile = os.path.join(base_folder, "log.txt")
 
-    with open(logfile, "w") as f:
+    with open(logfile, "w", encoding="utf-8") as f:
         f.write("Epoch\tTrain\tValidation\n")
 
     return run_name, tags, base_folder, logfile
 
 
 def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
+    """Load PDB data."""
     params = {
         "LIST": os.path.join(data_path, "list.csv"),
         "VAL": os.path.join(data_path, "valid_clusters.txt"),
@@ -196,6 +202,7 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
 
 def get_model_and_optimizer(args, device: Device, total_steps):
+    """Get model and optimizer."""
     model = ProteinMPNN(
         hidden_dim=args.hidden_dim,
         num_encoder_layers=args.num_encoder_layers,
@@ -240,7 +247,7 @@ def eval_pretrained_mpnn(
     fsd_thermo_pdb_dir=FSD_THERMO_PDB_DIR,
     fsd_thermo_cache_path=FSD_THERMO_CACHE_PATH,
 ):
-
+    """Evaluate pretrained MPNN."""
     pretrained_model.eval()
     model = EnergyMPNN(
         protein_mpnn=pretrained_model,
@@ -315,7 +322,8 @@ def eval_pretrained_mpnn(
     return train_metrics, valid_metrics, test_metrics, fsd_thermo_metrics
 
 
-def train(args):
+def train(args):  # noqa: C901
+    """Train the model."""
     if args.seed is not None:
         seed_everything(args.seed)
 
@@ -353,35 +361,35 @@ def train(args):
         wandb.log({"Total parameters": sum(p.numel() for p in model.parameters())})
 
     total_step = 0
-    for e in tqdm(range(args.num_epochs), desc="Epoch"):
+    for e_offset in tqdm(range(args.num_epochs), desc="Epoch"):
         t0 = time.time()
-        e = epoch + e
+        epoch_idx = epoch + e_offset
         model.train()
         train_sum, train_weights = 0.0, 0.0
         train_acc = 0.0
         skipped_batches = 0
 
-        for batch_idx, data in tqdm(
+        for batch_idx, batch in tqdm(
             enumerate(pdb_loader_train), total=len(pdb_loader_train), desc="Training Batch"
         ):
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                data = data.to(device)  # type: ignore
-                mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
-                S = data.chain_seq_label.unsqueeze(0)
+                batch_data = batch.to(device)  # type: ignore
+                mask_for_loss = (batch_data.mask * batch_data.chain_mask_all).unsqueeze(0)
+                S = batch_data.chain_seq_label.unsqueeze(0)
 
                 with torch.autocast(
                     device_type="cuda", dtype=torch.bfloat16, enabled=args.mixed_precision
                 ):
                     log_probs = model(
-                        data.x,
-                        data.chain_seq_label,
-                        data.mask,
-                        data.chain_mask_all,
-                        data.residue_idx,
-                        data.chain_encoding_all,
-                        data.batch,
+                        batch_data.x,
+                        batch_data.chain_seq_label,
+                        batch_data.mask,
+                        batch_data.chain_mask_all,
+                        batch_data.residue_idx,
+                        batch_data.chain_encoding_all,
+                        batch_data.batch,
                     )
                     log_probs_3d = log_probs.unsqueeze(0)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
@@ -439,25 +447,29 @@ def train(args):
             np.float32(train_accuracy), unique=False, precision=3
         )
 
-        if (e + 1) == 1 or (e + 1) % args.validate_every_n_epochs == 0 or e == args.num_epochs - 1:
+        if (
+            (epoch_idx + 1) == 1
+            or (epoch_idx + 1) % args.validate_every_n_epochs == 0
+            or epoch_idx == args.num_epochs - 1
+        ):
             model.eval()
             validation_sum, validation_weights = 0.0, 0.0
             validation_acc = 0.0
-            for _, data in tqdm(
+            for _, batch in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                data = data.to(device)  # type: ignore
-                S = data.chain_seq_label.unsqueeze(0)
-                mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
+                batch_data = batch.to(device)  # type: ignore
+                S = batch_data.chain_seq_label.unsqueeze(0)
+                mask_for_loss = (batch_data.mask * batch_data.chain_mask_all).unsqueeze(0)
                 with torch.inference_mode():
                     log_probs = model(
-                        data.x,
-                        data.chain_seq_label,
-                        data.mask,
-                        data.chain_mask_all,
-                        data.residue_idx,
-                        data.chain_encoding_all,
-                        data.batch,
+                        batch_data.x,
+                        batch_data.chain_seq_label,
+                        batch_data.mask,
+                        batch_data.chain_mask_all,
+                        batch_data.residue_idx,
+                        batch_data.chain_encoding_all,
+                        batch_data.batch,
                     )
                     log_probs_3d = log_probs.unsqueeze(0)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
@@ -486,7 +498,7 @@ def train(args):
                     },
                     step=total_step,
                 )
-                if e == args.num_epochs - 1:
+                if epoch_idx == args.num_epochs - 1:
                     wandb.log(
                         {
                             "final_validation_perplexity": float(validation_perplexity_),
@@ -523,14 +535,14 @@ def train(args):
         t1 = time.time()
         dt = np.format_float_positional(np.float32(t1 - t0), unique=False, precision=1)
         os.makedirs(os.path.dirname(logfile), exist_ok=True)
-        with open(logfile, "a") as f:
+        with open(logfile, "a", encoding="utf-8") as f:
             f.write(
-                f"epoch: {e + 1}, step: {total_step}, time: {dt}, train: {train_perplexity_}, valid: {validation_perplexity_}, train_acc: {train_accuracy_}, valid_acc: {validation_accuracy_}, skipped_batches: {skipped_batches}\n"
+                f"epoch: {epoch_idx + 1}, step: {total_step}, time: {dt}, train: {train_perplexity_}, valid: {validation_perplexity_}, train_acc: {train_accuracy_}, valid_acc: {validation_accuracy_}, skipped_batches: {skipped_batches}\n"
             )
         if args.wandb:
             wandb.log(
                 {
-                    "epoch": e + 1,
+                    "epoch": epoch_idx + 1,
                     "step": total_step,
                     "time": float(dt),
                     "train_perplexity": float(train_perplexity_),
@@ -543,7 +555,7 @@ def train(args):
 
         logger.info(
             "epoch: %s, step: %s, time: %s, train: %s, skipped_batches: %s",
-            e + 1,
+            epoch_idx + 1,
             total_step,
             dt,
             train_perplexity_,
@@ -553,7 +565,7 @@ def train(args):
         # save model weights
         optimizer_state_dict = optimizer.state_dict()
         model_info = {
-            "epoch": e + 1,
+            "epoch": epoch_idx + 1,
             "step": total_step,
             "num_edges": args.num_neighbors,
             "noise_level": args.backbone_noise,
@@ -567,14 +579,14 @@ def train(args):
         checkpoint_filename_last = os.path.join(base_folder, "model_weights", "last_epoch.pt")
         torch.save(model_info, checkpoint_filename_last)
 
-        if (e + 1) % args.save_model_every_n_epochs == 0:
+        if (epoch_idx + 1) % args.save_model_every_n_epochs == 0:
             checkpoint_filename = os.path.join(
-                base_folder, "model_weights", f"epoch_{e + 1}_step_{total_step}.pt"
+                base_folder, "model_weights", f"epoch_{epoch_idx + 1}_step_{total_step}.pt"
             )
             torch.save(model_info, checkpoint_filename)
 
-        if (e + 1) % args.reload_data_every_n_epochs == 0:
-            logger.info("Reloading training data at epoch %s...", e + 1)
+        if (epoch_idx + 1) % args.reload_data_every_n_epochs == 0:
+            logger.info("Reloading training data at epoch %s...", epoch_idx + 1)
             pdb_dict_train = []
             skipped_excluded = 0
             for x in tqdm(
@@ -596,7 +608,7 @@ def train(args):
             )
             pdb_loader_train = StructureLoader(pdb_dataset_train, batch_sampler=batch_sampler_train)
 
-        if e == args.num_epochs - 1:
+        if epoch_idx == args.num_epochs - 1:
             logger.info("Training complete. Saving model weights...")
             checkpoint_filename = os.path.join(base_folder, "model_weights", "final_epoch.pt")
             torch.save(model_info, checkpoint_filename)

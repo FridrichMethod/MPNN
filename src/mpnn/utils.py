@@ -1,3 +1,5 @@
+"""Utilities."""
+
 import functools
 import logging
 import os
@@ -18,7 +20,7 @@ _conda_not_installed_errmsg = "conda not installed"
 
 
 def get_conda_prefix() -> str:
-    """Attempts to find the root Conda folder. Works with miniforge3/miniconda3"""
+    """Attempt to find the root Conda folder. Works with miniforge3/miniconda3."""
     conda_root = os.getenv("CONDA_ROOT", None)
     if conda_root is None:
         # Attempt $CONDA_PREFIX_1 or $CONDA_PREFIX, depending
@@ -32,7 +34,7 @@ def get_conda_prefix() -> str:
 
 
 def clean_gpu_cache[**P, T](func: Callable[P, T]) -> Callable[P, T]:
-    """Decorator to clean GPU memory cache after the decorated function is executed."""
+    """Decorate to clean GPU memory cache after the decorated function is executed."""
     counter = 0
 
     @functools.wraps(func)

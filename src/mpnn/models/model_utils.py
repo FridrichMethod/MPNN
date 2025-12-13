@@ -1,3 +1,5 @@
+"""Model utilities."""
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,6 +9,7 @@ import torch.utils.checkpoint
 
 # The following gather functions
 def gather_edges(edges, neighbor_idx):
+    """Gather edges."""
     # Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
     neighbors = neighbor_idx.unsqueeze(-1).expand(-1, -1, -1, edges.size(-1))
     edge_features = torch.gather(edges, 2, neighbors)
@@ -14,17 +17,19 @@ def gather_edges(edges, neighbor_idx):
 
 
 def gather_nodes(nodes, neighbor_idx):
+    """Gather nodes."""
     # Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
     # Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
     neighbors_flat = neighbor_idx.view((neighbor_idx.shape[0], -1))
     neighbors_flat = neighbors_flat.unsqueeze(-1).expand(-1, -1, nodes.size(2))
     # Gather and re-pack
     neighbor_features = torch.gather(nodes, 1, neighbors_flat)
-    neighbor_features = neighbor_features.view(list(neighbor_idx.shape)[:3] + [-1])
+    neighbor_features = neighbor_features.view(*neighbor_idx.shape[:3], -1)
     return neighbor_features
 
 
 def gather_nodes_t(nodes, neighbor_idx):
+    """Gather nodes t."""
     # Features [B,N,C] at Neighbor index [B,K] => Neighbor features[B,K,C]
     idx_flat = neighbor_idx.unsqueeze(-1).expand(-1, -1, nodes.size(2))
     neighbor_features = torch.gather(nodes, 1, idx_flat)
@@ -32,13 +37,17 @@ def gather_nodes_t(nodes, neighbor_idx):
 
 
 def cat_neighbors_nodes(h_nodes, h_neighbors, E_idx):
+    """Concatenate neighbors and nodes."""
     h_nodes = gather_nodes(h_nodes, E_idx)
     h_nn = torch.cat([h_neighbors, h_nodes], -1)
     return h_nn
 
 
 class EncLayer(nn.Module):
+    """Encoder layer."""
+
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
+        """Initialize the encoder layer."""
         super().__init__()
         self.num_hidden = num_hidden
         self.num_in = num_in
@@ -60,7 +69,7 @@ class EncLayer(nn.Module):
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
 
     def forward(self, h_V, h_E, E_idx, mask_V=None, mask_attend=None):
-        """Parallel computation of full transformer layer"""
+        """Parallel computation of full transformer layer."""
         h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
         h_V_expand = h_V.unsqueeze(-2).expand(-1, -1, h_EV.size(-2), -1)
         h_EV = torch.cat([h_V_expand, h_EV], -1)
@@ -85,7 +94,10 @@ class EncLayer(nn.Module):
 
 
 class DecLayer(nn.Module):
+    """Decoder layer."""
+
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
+        """Initialize the decoder layer."""
         super().__init__()
         self.num_hidden = num_hidden
         self.num_in = num_in
@@ -102,7 +114,7 @@ class DecLayer(nn.Module):
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
 
     def forward(self, h_V, h_E, mask_V=None, mask_attend=None):
-        """Parallel computation of full transformer layer"""
+        """Parallel computation of full transformer layer."""
         # Concatenate h_V_i to h_E_ij
         h_V_expand = h_V.unsqueeze(-2).expand(-1, -1, h_E.size(-2), -1)
         h_EV = torch.cat([h_V_expand, h_E], -1)
@@ -125,26 +137,34 @@ class DecLayer(nn.Module):
 
 
 class PositionWiseFeedForward(nn.Module):
+    """Position-wise feed forward network."""
+
     def __init__(self, num_hidden, num_ff):
+        """Initialize."""
         super().__init__()
         self.W_in = nn.Linear(num_hidden, num_ff, bias=True)
         self.W_out = nn.Linear(num_ff, num_hidden, bias=True)
         self.act = torch.nn.GELU()
 
     def forward(self, h_V):
+        """Forward pass."""
         h = self.act(self.W_in(h_V))
         h = self.W_out(h)
         return h
 
 
 class PositionalEncodings(nn.Module):
+    """Positional encodings."""
+
     def __init__(self, num_embeddings, max_relative_feature=32):
+        """Initialize."""
         super().__init__()
         self.num_embeddings = num_embeddings
         self.max_relative_feature = max_relative_feature
         self.linear = nn.Linear(2 * max_relative_feature + 1 + 1, num_embeddings)
 
     def forward(self, offset, mask):
+        """Forward pass."""
         d = torch.clip(
             offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
         ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
@@ -156,6 +176,8 @@ class PositionalEncodings(nn.Module):
 
 
 class ProteinFeatures(nn.Module):
+    """Extract protein features."""
+
     def __init__(
         self,
         edge_features,
@@ -166,7 +188,7 @@ class ProteinFeatures(nn.Module):
         augment_eps=0.0,
         num_chain_embeddings=16,
     ):
-        """Extract protein features"""
+        """Extract protein features."""
         super().__init__()
         self.edge_features = edge_features
         self.node_features = node_features
@@ -176,7 +198,7 @@ class ProteinFeatures(nn.Module):
         self.num_positional_embeddings = num_positional_embeddings
 
         self.embeddings = PositionalEncodings(num_positional_embeddings)
-        node_in, edge_in = 6, num_positional_embeddings + num_rbf * 25
+        edge_in = num_positional_embeddings + num_rbf * 25
         self.edge_embedding = nn.Linear(edge_in, edge_features, bias=False)
         self.norm_edges = nn.LayerNorm(edge_features)
 
@@ -186,7 +208,6 @@ class ProteinFeatures(nn.Module):
         D = mask_2D * torch.sqrt(torch.sum(dX**2, 3) + eps)
         D_max, _ = torch.max(D, -1, keepdim=True)
         D_adjust = D + (1.0 - mask_2D) * D_max
-        sampled_top_k = self.top_k
         D_neighbors, E_idx = torch.topk(
             D_adjust, np.minimum(self.top_k, X.shape[1]), dim=-1, largest=False
         )
@@ -211,6 +232,7 @@ class ProteinFeatures(nn.Module):
         return RBF_A_B
 
     def forward(self, X, mask, residue_idx, chain_labels, backbone_noise=None):
+        """Forward pass."""
         if backbone_noise is not None:
             X = X + backbone_noise
         elif self.training:
@@ -271,6 +293,8 @@ class ProteinFeatures(nn.Module):
 
 
 class ProteinMPNN(nn.Module):
+    """Protein MPNN model."""
+
     def __init__(
         self,
         num_letters=21,
@@ -284,6 +308,7 @@ class ProteinMPNN(nn.Module):
         augment_eps=0.1,
         dropout=0.1,
     ):
+        """Initialize."""
         super().__init__()
 
         # Hyperparameters
@@ -324,7 +349,7 @@ class ProteinMPNN(nn.Module):
         fix_order=None,
         fix_backbone_noise=None,
     ):
-        """Graph-conditioned sequence model"""
+        """Graph-conditioned sequence model."""
         device = X.device
         # Prepare node and edge embeddings
         # Checkpoint the expensive feature extraction during training
@@ -400,46 +425,3 @@ class ProteinMPNN(nn.Module):
         logits = self.W_out(h_V)
         log_probs = F.log_softmax(logits, dim=-1)
         return log_probs
-
-
-class NoamOpt:
-    """Optim wrapper that implements rate."""
-
-    def __init__(self, model_size, factor, warmup, optimizer, step):
-        self.optimizer = optimizer
-        self._step = step
-        self.warmup = warmup
-        self.factor = factor
-        self.model_size = model_size
-        self._rate = 0
-
-    @property
-    def param_groups(self):
-        """Return param_groups."""
-        return self.optimizer.param_groups
-
-    def step(self):
-        """Update parameters and rate"""
-        self._step += 1
-        rate = self.rate()
-        for p in self.optimizer.param_groups:
-            p["lr"] = rate
-        self._rate = rate
-        self.optimizer.step()
-
-    def rate(self, step=None):
-        """Implement `lrate` above"""
-        if step is None:
-            step = self._step
-        return self.factor * (
-            self.model_size ** (-0.5) * min(step ** (-0.5), step * self.warmup ** (-1.5))
-        )
-
-    def zero_grad(self):
-        self.optimizer.zero_grad()
-
-
-def get_std_opt(parameters, d_model, step):
-    return NoamOpt(
-        d_model, 2, 4000, torch.optim.Adam(parameters, lr=0, betas=(0.9, 0.98), eps=1e-9), step
-    )
