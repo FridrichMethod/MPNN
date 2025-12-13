@@ -420,6 +420,11 @@ if __name__ == "__main__":
         default=None,
         help="cutoff distance for radius graph (if None, use k-nn)",
     )
+    argparser.add_argument(
+        "--use_virtual_center",
+        action="store_true",
+        help="use virtual center in edge features",
+    )
 
     args = argparser.parse_args()
 
@@ -477,6 +482,7 @@ if __name__ == "__main__":
         edge_cutoff=args.edge_cutoff,
         dropout=0.0,
         augment_eps=0.0,
+        use_virtual_center=args.use_virtual_center,
     )
 
     mpnn_checkpoint = torch.load(args.checkpoint)

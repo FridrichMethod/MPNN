@@ -256,6 +256,7 @@ class ProteinMPNN(torch.nn.Module):
         num_positional_embedding: int = 16,
         vocab_size: int = 21,
         checkpoint_featurize: bool = True,
+        use_virtual_center: bool = False,
     ) -> None:
         """Initialize."""
         super().__init__()
@@ -265,11 +266,17 @@ class ProteinMPNN(torch.nn.Module):
         self.edge_cutoff = edge_cutoff
         self.num_rbf = num_rbf
         self.checkpoint_featurize = checkpoint_featurize
+        self.use_virtual_center = use_virtual_center
         self.embedding = PositionalEncoding(num_positional_embedding)
+
+        # 6 atoms: N, Ca, C, O, Cb, V if use_virtual_center else 5
+        num_atoms_per_node = 6 if use_virtual_center else 5
+        num_distance_pairs = num_atoms_per_node**2
+
         self.edge_mlp = torch.nn.Sequential(
             torch.nn.Linear(
-                num_positional_embedding + num_rbf * 25, hidden_dim
-            ),  # NOTE: bug fixed here
+                num_positional_embedding + num_rbf * num_distance_pairs, hidden_dim
+            ),  # NOTE: updated for atoms pairs
             torch.nn.LayerNorm(hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         )
@@ -303,6 +310,25 @@ class ProteinMPNN(torch.nn.Module):
         a = torch.cross(b, c, dim=-1)
         Cb = -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + Ca
 
+        atoms_list = [N, Ca, C, O, Cb]
+
+        if self.use_virtual_center:
+            l_virtual = 3.06  # 2 * 1.53 Angstrom
+
+            u_bc = Cb - Ca
+            u_bc = u_bc / (torch.norm(u_bc, dim=-1, keepdim=True) + 1e-6)
+
+            u_nc = N - Ca
+            u_nc = u_nc / (torch.norm(u_nc, dim=-1, keepdim=True) + 1e-6)
+
+            n_plane = torch.cross(u_nc, u_bc, dim=-1)
+            n_plane = n_plane / (torch.norm(n_plane, dim=-1, keepdim=True) + 1e-6)
+
+            v_dir = -torch.cross(n_plane, u_bc, dim=-1)
+
+            V = Ca + l_virtual * v_dir
+            atoms_list.append(V)
+
         valid_mask = mask.bool()
         valid_Ca = Ca[valid_mask]
         valid_batch = batch[valid_mask]
@@ -324,7 +350,7 @@ class ProteinMPNN(torch.nn.Module):
         row, col = edge_index_original
 
         rbf_all = []
-        for A, B in list(product([N, Ca, C, O, Cb], repeat=2)):
+        for A, B in list(product(atoms_list, repeat=2)):
             distances = torch.sqrt(torch.sum((A[row] - B[col]) ** 2, 1) + 1e-6)
             rbf = self._rbf(distances)
             rbf_all.append(rbf)

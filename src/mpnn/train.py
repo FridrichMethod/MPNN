@@ -211,6 +211,7 @@ def get_model_and_optimizer(args, device: Device, total_steps):
         edge_cutoff=args.edge_cutoff,
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
+        use_virtual_center=args.use_virtual_center,
     )
     model.to(device)
 
@@ -763,6 +764,11 @@ if __name__ == "__main__":
         type=float,
         default=None,
         help="cutoff distance for radius graph (if None, use k-nn)",
+    )
+    argparser.add_argument(
+        "--use_virtual_center",
+        action="store_true",
+        help="use virtual center in edge features",
     )
     args = argparser.parse_args()
     train(args)

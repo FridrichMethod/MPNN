@@ -8,8 +8,9 @@ python -m mpnn.train \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
     --edge_cutoff 15 \
-    --max_protein_length 10000 \
     --backbone_noise 0.2 \
+    --use_virtual_center \
+    --max_protein_length 10000 \
     --rescut 3.5 \
     --num_workers 8 \
     --batch_size 2000 \
