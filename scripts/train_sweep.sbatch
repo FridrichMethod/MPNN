@@ -8,23 +8,23 @@
 #SBATCH --constraint=gpu_mem:80GB
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
-#SBATCH --array=0-15
+#SBATCH --array=0-7
 
 # Define parameter arrays
-EDGE_CUTOFFS=(8.0 10.0 15.0 20.0)
+EDGE_CUTOFFS=(10.0 15.0)
 USE_VIRTUAL_CENTERS=(false true)
 OCCUPANCY_CUTOFFS=(6.0 9.0)
 
 # Calculate indices for the current task
-# Total combinations = 4 * 2 * 2 = 16
+# Total combinations = 2 * 2 * 2 = 8
 # Index logic:
-# i_edge = task_id % 4
-# i_vc = (task_id / 4) % 2
-# i_occ = (task_id / 8) % 2
+# i_edge = task_id % 2
+# i_vc = (task_id / 2) % 2
+# i_occ = (task_id / 4) % 2
 
-i_edge=$((SLURM_ARRAY_TASK_ID % 4))
-i_vc=$(((SLURM_ARRAY_TASK_ID / 4) % 2))
-i_occ=$(((SLURM_ARRAY_TASK_ID / 8) % 2))
+i_edge=$((SLURM_ARRAY_TASK_ID % 2))
+i_vc=$(((SLURM_ARRAY_TASK_ID / 2) % 2))
+i_occ=$(((SLURM_ARRAY_TASK_ID / 4) % 2))
 
 EDGE_CUTOFF=${EDGE_CUTOFFS[$i_edge]}
 USE_VC_BOOL=${USE_VIRTUAL_CENTERS[$i_vc]}
@@ -49,6 +49,7 @@ source ~/.bashrc
 conda activate ./.env/mpnn
 
 python -m mpnn.train \
+    --output_dir ./results/"${RUN_NAME}" \
     --optimizer adamw \
     --scheduler cosine \
     --hidden_dim 128 \
