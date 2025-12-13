@@ -194,6 +194,7 @@ def entry_to_pyg_data(entry: dict) -> Data:
         chain_mask_all=chain_M[0],
         residue_idx=residue_idx[0],
         chain_encoding_all=chain_encoding_all[0],
+        name=entry["name"],
     )
 
 
