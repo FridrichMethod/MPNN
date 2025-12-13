@@ -8,15 +8,16 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.types import Device
+from torch.utils.data import DataLoader
 from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
 from mpnn.data import (
     MegascaleDataset,
     PDBDataset,
-    PDBDatasetFlattened,
     StructureDataset,
     StructureLoader,
     ThermoMutDBDataset,
@@ -25,6 +26,7 @@ from mpnn.data.data_utils import (
     build_training_clusters,
     loader_pdb,
 )
+from mpnn.data.protein_mpnn_dataset import LengthBatchSampler
 from mpnn.env import (
     DEFAULT_TRAIN_DATA_PATH,
     DEFAULT_TRAIN_OUTPUT_DIR,
@@ -137,15 +139,11 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
     train_clusters = PDBDataset(list(train.keys()), loader_pdb, train, params)
     print(f"number of training clusters: {len(train_clusters)}")
-    train_cluster_loader = torch.utils.data.DataLoader(
-        train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
-    )
+    train_cluster_loader = DataLoader(train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
 
-    valid_clusters = PDBDatasetFlattened(list(valid.keys()), loader_pdb, valid, params)
+    valid_clusters = PDBDataset(list(valid.keys()), loader_pdb, valid, params, flattened=True)
     print(f"number of validation clusters: {len(valid_clusters)}")
-    valid_cluster_loader = torch.utils.data.DataLoader(
-        valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
-    )
+    valid_cluster_loader = DataLoader(valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
 
     pdb_dict_train = []
     skipped_excluded = 0
@@ -173,15 +171,24 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
             "max_protein_length must be less than batch_size. Reducing max_protein_length to batch_size."
         )
 
-    pdb_dataset_train = StructureDataset(
-        pdb_dict_train, truncate=None, max_length=args.max_protein_length
+    pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
+    pdb_dataset_valid = StructureDataset(pdb_dict_valid, max_length=args.max_protein_length)
+
+    batch_sampler_train = LengthBatchSampler(
+        pdb_dataset_train.lengths, batch_size=args.batch_size, shuffle=True, drop_last=False
     )
-    pdb_dataset_valid = StructureDataset(
-        pdb_dict_valid, truncate=None, max_length=args.max_protein_length
+    batch_sampler_valid = LengthBatchSampler(
+        pdb_dataset_valid.lengths, batch_size=args.batch_size, shuffle=True, drop_last=False
     )
 
-    pdb_loader_train = StructureLoader(pdb_dataset_train, batch_size=args.batch_size)
-    pdb_loader_valid = StructureLoader(pdb_dataset_valid, batch_size=args.batch_size)
+    pdb_loader_train = StructureLoader(
+        pdb_dataset_train,
+        batch_sampler=batch_sampler_train,
+    )
+    pdb_loader_valid = StructureLoader(
+        pdb_dataset_valid,
+        batch_sampler=batch_sampler_valid,
+    )
 
     return pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs
 
@@ -200,9 +207,7 @@ def get_model_and_optimizer(args, device: Device, total_steps):
     print("Total parameters: ", sum(p.numel() for p in model.parameters()))
 
     epoch = 0
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
-    )
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     warmup_steps = int(0.01 * total_steps)
     warmup = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup_steps)
@@ -324,7 +329,7 @@ def train(args):
         and not args.force_rerun
     ):
         print(f"Training run already exists for {run_name}. Use --force_rerun to rerun the model.")
-        return
+        return None
 
     pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs = load_pdb_data(
         args.path_for_training_data, args
@@ -362,20 +367,9 @@ def train(args):
                 mask_for_loss = (data.mask * data.chain_mask_all).unsqueeze(0)
                 S = data.chain_seq_label.unsqueeze(0)
 
-                if args.mixed_precision:
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        log_probs = model(
-                            data.x,
-                            data.chain_seq_label,
-                            data.mask,
-                            data.chain_mask_all,
-                            data.residue_idx,
-                            data.chain_encoding_all,
-                            data.batch,
-                        )
-                        log_probs_3d = log_probs.unsqueeze(0)
-                        _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
-                else:
+                with torch.autocast(
+                    device_type="cuda", dtype=torch.bfloat16, enabled=args.mixed_precision
+                ):
                     log_probs = model(
                         data.x,
                         data.chain_seq_label,
@@ -531,9 +525,7 @@ def train(args):
                     "time": float(dt),
                     "train_perplexity": float(train_perplexity_),
                     "train_accuracy": float(train_accuracy_),
-                    "learning_rate": optimizer.param_groups[0]["lr"]
-                    if args.optimizer == "adamw"
-                    else optimizer.rate(total_step),
+                    "learning_rate": optimizer.param_groups[0]["lr"],
                     "skipped_batches": skipped_batches,
                 },
                 step=total_step,
@@ -552,7 +544,7 @@ def train(args):
             "noise_level": args.backbone_noise,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer_state_dict,
-            "scheduler_state_dict": scheduler.state_dict() if args.scheduler == "cosine" else None,
+            "scheduler_state_dict": scheduler.state_dict(),
         }
 
         if not os.path.exists(os.path.join(base_folder, "model_weights")):
@@ -580,10 +572,14 @@ def train(args):
                     continue
                 pdb_dict_train.append(x)
             print(f"Skipped {skipped_excluded} excluded PDBs")
-            pdb_dataset_train = StructureDataset(
-                pdb_dict_train, truncate=None, max_length=args.max_protein_length
+            pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
+            batch_sampler_train = LengthBatchSampler(
+                pdb_dataset_train.lengths,
+                batch_size=args.batch_size,
+                shuffle=True,
+                drop_last=False,
             )
-            pdb_loader_train = StructureLoader(pdb_dataset_train, batch_size=args.batch_size)
+            pdb_loader_train = StructureLoader(pdb_dataset_train, batch_sampler=batch_sampler_train)
 
         if e == args.num_epochs - 1:
             print("Training complete. Saving model weights...")
@@ -620,12 +616,6 @@ if __name__ == "__main__":
         type=int,
         default=10,
         help="save model weights every n epochs",
-    )
-    argparser.add_argument(
-        "--num_examples_per_epoch",
-        type=int,
-        default=1000000,
-        help="number of training example to load for one epoch",
     )
     argparser.add_argument("--optimizer", type=str, default="adamw", help="optimizer to use")
     argparser.add_argument("--learning_rate", type=float, default=1e-4, help="learning rate")

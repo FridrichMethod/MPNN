@@ -1,124 +1,173 @@
 """ProteinMPNN dataset."""
 
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable, Sequence
+from itertools import chain
+
 import numpy as np
-from torch.utils.data import Dataset
-from torch_geometric.data import Batch
+from torch.utils.data import Dataset, Sampler
+from torch_geometric.loader import DataLoader
 
 from mpnn.common.constants import AA_ALPHABET
 from mpnn.data.data_utils import entry_to_pyg_data, process_pdb
 
 
-class StructureDataset:
-    def __init__(self, pdb_dict_list, truncate=None, max_length=100):
+class PDBDataset(Dataset):
+    """Wrap raw PDB entries; optionally flatten all entries for deterministic access."""
+
+    def __init__(
+        self,
+        ids: Sequence[str],
+        loader: Callable[[dict, dict], dict],
+        pdb_dict: dict,
+        params: dict,
+        max_length: int = 10000,
+        flattened: bool = False,
+    ):
+        """Store references and optionally build a flattened entry list."""
+        self.ids = ids
+        self.pdb_dict = pdb_dict
+        self.loader = loader
+        self.params = params
+        self.max_length = max_length
+        self.flattened = flattened
+
+        if self.flattened:
+            self.flat_entries = list(
+                chain.from_iterable(self.pdb_dict[pdb_id] for pdb_id in self.ids)
+            )
+
+    def __len__(self) -> int:
+        """Return number of IDs or flattened entries."""
+        if self.flattened:
+            return len(self.flat_entries)
+        return len(self.ids)
+
+    def __getitem__(self, index: int) -> dict | None:
+        """Load, process, and filter a single PDB entry."""
+        if self.flattened:
+            entry = self.flat_entries[index]
+        else:
+            idx = self.ids[index]
+            sel_idx = np.random.randint(0, len(self.pdb_dict[idx]))
+            entry = self.pdb_dict[idx][sel_idx]
+
+        out = self.loader(entry, self.params)
+        if "label" not in out:
+            return None
+        out = process_pdb(out)
+        if not out or len(out["seq"]) > self.max_length:
+            return None
+        return out
+
+
+class StructureDataset(Dataset):
+    """Filter PDB dicts by length/alphabet and expose PyG Data items."""
+
+    def __init__(
+        self,
+        entry_list: Iterable[dict],
+        max_length: int = 10000,
+    ):
+        """Filter invalid/long sequences and cache lengths for batching."""
         alphabet_set = set([a for a in AA_ALPHABET])
         discard_count = {"bad_chars": 0, "too_long": 0, "bad_seq_length": 0}
 
         self.data = []
+        self.lengths = []
 
-        for entry in pdb_dict_list:
+        for entry in entry_list:
             seq = entry["seq"]
 
             bad_chars = set([s for s in seq]).difference(alphabet_set)
             if len(bad_chars) == 0:
                 if len(entry["seq"]) <= max_length:
-                    self.data.append(entry)
+                    self.lengths.append(len(entry["seq"]))
+                    self.data.append(entry_to_pyg_data(entry))
                 else:
                     discard_count["too_long"] += 1
             else:
                 discard_count["bad_chars"] += 1
 
-            # Truncate early
-            if truncate is not None and len(self.data) == truncate:
-                return
+        print(f"Discarded: {discard_count}")
 
-        print("Discarded: ", discard_count)
-
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return number of retained structures."""
         return len(self.data)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
+        """Return a pre-converted PyG Data item."""
         return self.data[idx]
 
 
-class StructureLoader:
-    def __init__(
-        self, dataset, batch_size=100, shuffle=True, collate_fn=lambda x: x, drop_last=False
-    ):
-        self.dataset = dataset
-        self.size = len(dataset)
-        self.lengths = [len(dataset[i]["seq"]) for i in range(self.size)]
-        self.batch_size = batch_size
-        sorted_ix = np.argsort(self.lengths)
+class LengthBatchSampler(Sampler[list[int]]):
+    """Length-aware batch sampler that mimics the original clustering logic."""
 
-        # Cluster into batches of similar sizes
-        clusters, batch = [], []
+    def __init__(
+        self,
+        lengths: Sequence[int],
+        batch_size: int = 100,
+        shuffle: bool = True,
+        drop_last: bool = False,
+    ):
+        """Pre-compute length-clustered batches."""
+        self.lengths = list(lengths)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.drop_last = drop_last
+
+        self.clusters = self._build_clusters()
+
+    def _build_clusters(self) -> list[list[int]]:
+        sorted_ix = np.argsort(self.lengths)
+        clusters: list[list[int]] = []
+        batch: list[int] = []
         for ix in sorted_ix:
             size = self.lengths[ix]
             if size * (len(batch) + 1) <= self.batch_size:
-                batch.append(ix)
+                batch.append(int(ix))
             else:
                 clusters.append(batch)
-                batch = []
+                batch = [int(ix)]
         if len(batch) > 0:
             clusters.append(batch)
-        self.clusters = clusters
-
-    def __len__(self):
-        return len(self.clusters)
+        return clusters
 
     def __iter__(self):
-        np.random.shuffle(self.clusters)
-        for b_idx in self.clusters:
-            entries = [self.dataset[i] for i in b_idx]
-            data_list = [entry_to_pyg_data(e) for e in entries if e is not None]
-            if len(data_list) == 0:
-                continue
-            yield Batch.from_data_list(data_list)  # type: ignore[arg-type]
+        """Yield index batches, shuffling batch order each epoch."""
+        clusters = list(self.clusters)
+        if self.shuffle:
+            np.random.shuffle(clusters)
+        yield from clusters
+
+    def __len__(self) -> int:
+        """Return the number of batches."""
+        return len(self.clusters)
 
 
-class PDBDataset(Dataset):
-    def __init__(self, ids, loader, dict, params, max_length=10000):
-        self.ids = ids
-        self.dict = dict
-        self.loader = loader
-        self.params = params
-        self.max_length = max_length
+class StructureLoader(DataLoader):
+    """DataLoader wrapper that enforces a custom batch sampler for PyG Data."""
 
-    def __len__(self):
-        return len(self.ids)
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_sampler: Sampler[list[int]],
+        **dataloader_kwargs,
+    ):
+        """Initialize with a user-provided batch sampler and safe defaults."""
+        # Prevent incompatible overrides that would break custom batch_sampler logic
+        forbidden = {"batch_sampler", "sampler", "shuffle", "drop_last", "batch_size"}
+        bad_keys = forbidden.intersection(dataloader_kwargs.keys())
+        if bad_keys:
+            raise ValueError(f"StructureLoader manages {bad_keys}; please remove them from kwargs.")
 
-    def __getitem__(self, index):
-        idx = self.ids[index]
-        sel_idx = np.random.randint(0, len(self.dict[idx]))
-        out = self.loader(self.dict[idx][sel_idx], self.params)
-        if "label" not in out:
-            return None
-        out = process_pdb(out)
-        if not out or len(out["seq"]) > self.max_length:
-            return None
-        return out
-
-
-class PDBDatasetFlattened(Dataset):
-    def __init__(self, ids, loader, dict, params, max_length=10000):
-        self.ids = ids
-        self.dict = dict
-        self.loader = loader
-        self.params = params
-        self.max_length = max_length
-        self.flattened_ids = []
-        for idx in self.ids:
-            for idx in range(len(self.dict[idx])):
-                self.flattened_ids.append(self.dict[idx][idx])
-
-    def __len__(self):
-        return len(self.flattened_ids)
-
-    def __getitem__(self, index):
-        out = self.loader(self.flattened_ids[index], self.params)
-        if "label" not in out:
-            return None
-        out = process_pdb(out)
-        if not out or len(out["seq"]) > self.max_length:
-            return None
-        return out
+        super().__init__(
+            dataset,
+            batch_size=1,  # PyTorch requires batch_size=1 when batch_sampler is set
+            shuffle=False,
+            sampler=None,
+            batch_sampler=batch_sampler,
+            drop_last=False,
+            **dataloader_kwargs,
+        )
