@@ -263,7 +263,7 @@ class ProteinMPNN(torch.nn.Module):
         augment_eps: float = 0.2,
         num_positional_embedding: int = 16,
         vocab_size: int = 21,
-        checkpoint_featurize: bool = True,
+        checkpoint_featurize: bool = False,
         use_virtual_center: bool = False,
         occupancy_cutoff: float | None = None,
     ) -> None:
