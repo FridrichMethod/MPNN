@@ -13,14 +13,20 @@ import wandb
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.types import Device
+from torch.utils.data import DataLoader
 from torch_geometric import seed_everything
-from torch_geometric.loader import DataLoader as PyGDataLoader
 from tqdm.auto import tqdm
 
 from mpnn.data import (
     MegascaleDataset,
-    ProteinMPNNDataset,
     ThermoMutDBDataset,
+)
+from mpnn.data.data_utils import build_training_clusters, featurize, loader_pdb
+from mpnn.data.protein_mpnn_dataset import (
+    PDBDataset,
+    PDBDatasetFlattened,
+    StructureDataset,
+    StructureLoader,
 )
 from mpnn.env import (
     DEFAULT_TRAIN_OUTPUT_DIR,
@@ -34,7 +40,8 @@ from mpnn.env import (
     TRAIN_DATA_PATH,
 )
 from mpnn.finetune import validation_step
-from mpnn.models import EnergyMPNN, ProteinMPNN
+from mpnn.models import EnergyMPNN
+from mpnn.models.model_utils import ProteinMPNN
 from mpnn.typing_utils import StrPath
 from mpnn.utils import enable_tf32_if_available, get_logger
 
@@ -105,67 +112,97 @@ def setup_run(args):
 
 def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
     """Load PDB data."""
+    params = {
+        "LIST": os.path.join(data_path, "list.csv"),
+        "VAL": os.path.join(data_path, "valid_clusters.txt"),
+        "TEST": os.path.join(data_path, "test_clusters.txt"),
+        "DIR": data_path,
+        "DATCUT": "2030-Jan-01",
+        "RESCUT": args.rescut,  # resolution cutoff for PDBs
+        "HOMO": 0.70,  # min seq.id. to detect homo chains
+    }
+
+    def collate_passthrough_filter(batch):  # batch_size=1
+        if not batch[0]:
+            return None
+        return batch[0]
+
     excluded_pdbs = []
     if args.exclude_membrane:
         excluded_pdbs = pd.read_csv(EXCLUDED_PDB_CSV)["PDB_IDS"].tolist()
 
-    pre_filter = None
-    if excluded_pdbs:
+    LOAD_PARAM = {
+        "batch_size": 1,
+        "shuffle": True,
+        "pin_memory": False,
+        "collate_fn": collate_passthrough_filter,
+        "persistent_workers": True,
+        "num_workers": min(args.num_workers, os.cpu_count()),
+    }
 
-        def pre_filter(data):
-            return data.name.split("_")[0] not in excluded_pdbs
-
-    # Heuristic for batch_size: if > 100, assume it was meant as max_tokens
-    # and default to a small batch size for graphs (e.g. 8)
-    batch_size = args.batch_size
-    if batch_size > 100:
-        logger.warning(
-            "batch_size %s is likely max_tokens. Using batch_size=8 for PyG DataLoader (graphs).",
-            batch_size,
-        )
-        batch_size = 8
+    logger.info("building training clusters")
+    train, valid, _ = build_training_clusters(params)
 
     logger.info("loading datasets")
-    train_dataset = ProteinMPNNDataset(
-        root=data_path,
-        size="small",
-        split="train",
-        rescut=args.rescut,
-        max_length=args.max_protein_length,
-        pre_filter=pre_filter,
+
+    train_clusters = PDBDataset(list(train.keys()), loader_pdb, train, params)
+    logger.info("number of training clusters: %s", len(train_clusters))
+    train_cluster_loader = DataLoader(train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+
+    valid_clusters = PDBDatasetFlattened(list(valid.keys()), loader_pdb, valid, params)
+    logger.info("number of validation clusters: %s", len(valid_clusters))
+    valid_cluster_loader = DataLoader(valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+
+    pdb_dict_train = []
+    skipped_excluded = 0
+    for x in tqdm(
+        train_cluster_loader, total=len(train_cluster_loader), desc="Loading training data"
+    ):
+        if x is None:
+            continue
+        if x["name"].split("_")[0] in excluded_pdbs:
+            skipped_excluded += 1
+            continue
+        pdb_dict_train.append(x)
+    logger.info("Skipped %s excluded PDBs", skipped_excluded)
+
+    pdb_dict_valid = []
+    for x in tqdm(
+        valid_cluster_loader, total=len(valid_cluster_loader), desc="Loading validation data"
+    ):
+        if x is not None:
+            pdb_dict_valid.append(x)
+
+    if args.max_protein_length > args.batch_size:
+        args.max_protein_length = args.batch_size
+        logger.warning(
+            "max_protein_length must be less than batch_size. Reducing max_protein_length to batch_size."
+        )
+
+    pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
+    pdb_dataset_valid = StructureDataset(pdb_dict_valid, max_length=args.max_protein_length)
+
+    pdb_loader_train = StructureLoader(
+        pdb_dataset_train,
+        batch_size=args.batch_size,
     )
-    valid_dataset = ProteinMPNNDataset(
-        root=data_path,
-        size="small",
-        split="valid",
-        rescut=args.rescut,
-        max_length=args.max_protein_length,
-        pre_filter=pre_filter,
+    pdb_loader_valid = StructureLoader(
+        pdb_dataset_valid,
+        batch_size=args.batch_size,
     )
 
-    pdb_loader_train = PyGDataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=min(args.num_workers, os.cpu_count()),
-    )
-    pdb_loader_valid = PyGDataLoader(
-        valid_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=min(args.num_workers, os.cpu_count()),
-    )
-
-    return pdb_loader_train, pdb_loader_valid, None, excluded_pdbs
+    return pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs
 
 
 def get_model_and_optimizer(args, device: Device, total_steps):
     """Get model and optimizer."""
     model = ProteinMPNN(
+        node_features=args.hidden_dim,
+        edge_features=args.hidden_dim,
         hidden_dim=args.hidden_dim,
         num_encoder_layers=args.num_encoder_layers,
         num_decoder_layers=args.num_encoder_layers,
-        num_neighbors=args.num_neighbors,
+        k_neighbors=args.num_neighbors,
         edge_cutoff=args.edge_cutoff,
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
@@ -336,22 +373,15 @@ def train(args):  # noqa: C901
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                batch_data = batch.to(device)  # type: ignore
-                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
-                S = batch_data.chain_seq_label
+                X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
+                    batch, device
+                )
+                mask_for_loss = mask * chain_M
 
                 with torch.autocast(
                     device_type="cuda", dtype=torch.bfloat16, enabled=args.mixed_precision
                 ):
-                    log_probs = model(
-                        batch_data.x,
-                        batch_data.chain_seq_label,
-                        batch_data.mask,
-                        batch_data.chain_mask_all,
-                        batch_data.residue_idx,
-                        batch_data.chain_encoding_all,
-                        batch_data.batch,
-                    )
+                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
                 loss_av_smoothed.backward()
@@ -418,19 +448,12 @@ def train(args):  # noqa: C901
             for _, batch in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                batch_data = batch.to(device)  # type: ignore
-                S = batch_data.chain_seq_label
-                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
+                X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(
+                    batch, device
+                )
+                mask_for_loss = mask * chain_M
                 with torch.inference_mode():
-                    log_probs = model(
-                        batch_data.x,
-                        batch_data.chain_seq_label,
-                        batch_data.mask,
-                        batch_data.chain_mask_all,
-                        batch_data.residue_idx,
-                        batch_data.chain_encoding_all,
-                        batch_data.batch,
-                    )
+                    log_probs = model(X, S, mask, chain_M, residue_idx, chain_encoding_all)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
                 loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
@@ -544,9 +567,7 @@ def train(args):  # noqa: C901
             )
             torch.save(model_info, checkpoint_filename)
 
-        if (
-            epoch_idx + 1
-        ) % args.reload_data_every_n_epochs == 0 and train_cluster_loader is not None:
+        if (epoch_idx + 1) % args.reload_data_every_n_epochs == 0:
             logger.info("Reloading training data at epoch %s...", epoch_idx + 1)
             pdb_dict_train = []
             skipped_excluded = 0
@@ -560,8 +581,8 @@ def train(args):  # noqa: C901
                     continue
                 pdb_dict_train.append(x)
             logger.info("Skipped %s excluded PDBs", skipped_excluded)
-            # pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
-            # pdb_loader_train = StructureLoader(pdb_dataset_train, batch_size=args.batch_size)
+            pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
+            pdb_loader_train = StructureLoader(pdb_dataset_train, batch_size=args.batch_size)
 
         if epoch_idx == args.num_epochs - 1:
             logger.info("Training complete. Saving model weights...")

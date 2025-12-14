@@ -485,7 +485,7 @@ if __name__ == "__main__":
         hidden_dim=args.embedding_dim,
         num_encoder_layers=args.num_layers,
         num_decoder_layers=args.num_layers,
-        num_neighbors=args.num_neighbors,
+        k_neighbors=args.num_neighbors,
         edge_cutoff=args.edge_cutoff,
         dropout=0.0,
         augment_eps=0.0,

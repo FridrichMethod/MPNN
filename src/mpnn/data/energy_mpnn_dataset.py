@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
 from mpnn.common.constants import AA_ALPHABET
-from mpnn.data.data_utils import entry_to_pyg_data, parse_cif, parse_pdb
+from mpnn.data.data_utils import parse_cif, parse_pdb
 from mpnn.data.protein_mpnn_dataset import StructureDataset
 from mpnn.typing_utils import StrPath
 from mpnn.utils import get_logger
@@ -77,7 +77,7 @@ class FoldingDataset(Dataset):
             ddG = group["ddG"].to_numpy()
 
             # Convert dictionary to PyG Data object
-            data = entry_to_pyg_data(protein_complex)
+            data = protein_complex
 
             self.data.append({
                 "name": name,

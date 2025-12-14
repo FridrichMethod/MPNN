@@ -1,5 +1,7 @@
 """Model utilities."""
 
+from itertools import product
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -187,6 +189,9 @@ class ProteinFeatures(nn.Module):
         top_k=30,
         augment_eps=0.0,
         num_chain_embeddings=16,
+        edge_cutoff=None,
+        use_virtual_center=False,
+        occupancy_cutoff=None,
     ):
         """Extract protein features."""
         super().__init__()
@@ -196,11 +201,71 @@ class ProteinFeatures(nn.Module):
         self.augment_eps = augment_eps
         self.num_rbf = num_rbf
         self.num_positional_embeddings = num_positional_embeddings
+        self.edge_cutoff = edge_cutoff
+        self.use_virtual_center = use_virtual_center
+        self.occupancy_cutoff = occupancy_cutoff
 
         self.embeddings = PositionalEncodings(num_positional_embeddings)
-        edge_in = num_positional_embeddings + num_rbf * 25
+
+        num_atoms = 6 if use_virtual_center else 5
+        edge_in = num_positional_embeddings + num_rbf * (num_atoms**2)
         self.edge_embedding = nn.Linear(edge_in, edge_features, bias=False)
         self.norm_edges = nn.LayerNorm(edge_features)
+
+    def _get_virtual_center(self, Ca, Cb, N):
+        """Calculate virtual center coordinates."""
+        l_virtual = 3.06  # 2 * 1.53 Angstrom
+
+        u_bc = Cb - Ca
+        u_bc = u_bc / (torch.norm(u_bc, dim=-1, keepdim=True) + 1e-6)
+
+        u_nc = N - Ca
+        u_nc = u_nc / (torch.norm(u_nc, dim=-1, keepdim=True) + 1e-6)
+
+        n_plane = torch.cross(u_nc, u_bc, dim=-1)
+        n_plane = n_plane / (torch.norm(n_plane, dim=-1, keepdim=True) + 1e-6)
+
+        v_dir = -torch.cross(n_plane, u_bc, dim=-1)
+        V = Ca + l_virtual * v_dir
+        return V
+
+    def _compute_occupancy(self, V, mask):
+        """Compute occupancy feature."""
+        if self.occupancy_cutoff is None:
+            return None
+
+        # V: [B, L, 3]
+        # mask: [B, L]
+
+        # Calculate pairwise distances
+        # diff: [B, L, L, 3]
+        diff = V.unsqueeze(2) - V.unsqueeze(1)
+        d_sq = torch.sum(diff**2, dim=-1)  # [B, L, L]
+
+        # Mask
+        mask_2d = mask.unsqueeze(1) * mask.unsqueeze(2)  # [B, L, L]
+
+        # We also need to mask out self-loops (j != i)
+        diag_mask = 1.0 - torch.eye(V.size(1), device=V.device).unsqueeze(0)  # [1, L, L]
+
+        valid_mask = mask_2d * diag_mask
+
+        # Cutoff check
+        cutoff_mask = (d_sq < (self.occupancy_cutoff**2)).float()
+
+        # Neighbors
+        # weights w_j = 1.0
+        sigma = self.occupancy_cutoff / 3.0
+
+        occ = torch.exp(-d_sq / (2 * sigma**2))
+        occ = occ * valid_mask * cutoff_mask
+
+        occupancy = torch.sum(occ, dim=2, keepdim=True)  # [B, L, 1]
+
+        # Normalization (log1p)
+        occupancy = torch.log1p(occupancy)
+
+        return occupancy
 
     def _dist(self, X, mask, eps=1e-6):
         mask_2D = torch.unsqueeze(mask, 1) * torch.unsqueeze(mask, 2)
@@ -208,10 +273,20 @@ class ProteinFeatures(nn.Module):
         D = mask_2D * torch.sqrt(torch.sum(dX**2, 3) + eps)
         D_max, _ = torch.max(D, -1, keepdim=True)
         D_adjust = D + (1.0 - mask_2D) * D_max
+
+        if self.edge_cutoff is not None:
+            cutoff_mask = (self.edge_cutoff > D).float()
+            D_adjust = D_adjust + (1.0 - cutoff_mask) * 1e6
+
         D_neighbors, E_idx = torch.topk(
             D_adjust, np.minimum(self.top_k, X.shape[1]), dim=-1, largest=False
         )
-        return D_neighbors, E_idx
+
+        edge_mask = None
+        if self.edge_cutoff is not None:
+            edge_mask = (D_neighbors < self.edge_cutoff).float()
+
+        return D_neighbors, E_idx, edge_mask
 
     def _rbf(self, D):
         device = D.device
@@ -248,34 +323,27 @@ class ProteinFeatures(nn.Module):
         C = X[:, :, 2, :]
         O = X[:, :, 3, :]
 
-        D_neighbors, E_idx = self._dist(Ca, mask)
+        atoms_list = [N, Ca, C, O, Cb]
+
+        if self.use_virtual_center:
+            V = self._get_virtual_center(Ca, Cb, N)
+            atoms_list.append(V)
+
+        D_neighbors, E_idx, edge_mask = self._dist(Ca, mask)
+
+        occupancy = None
+        if self.occupancy_cutoff is not None:
+            # We need V for occupancy. If not already computed:
+            V_occ = (
+                atoms_list[-1] if self.use_virtual_center else self._get_virtual_center(Ca, Cb, N)
+            )
+            occupancy = self._compute_occupancy(V_occ, mask)
 
         RBF_all = []
-        RBF_all.append(self._rbf(D_neighbors))  # Ca-Ca
-        RBF_all.append(self._get_rbf(N, N, E_idx))  # N-N
-        RBF_all.append(self._get_rbf(C, C, E_idx))  # C-C
-        RBF_all.append(self._get_rbf(O, O, E_idx))  # O-O
-        RBF_all.append(self._get_rbf(Cb, Cb, E_idx))  # Cb-Cb
-        RBF_all.append(self._get_rbf(Ca, N, E_idx))  # Ca-N
-        RBF_all.append(self._get_rbf(Ca, C, E_idx))  # Ca-C
-        RBF_all.append(self._get_rbf(Ca, O, E_idx))  # Ca-O
-        RBF_all.append(self._get_rbf(Ca, Cb, E_idx))  # Ca-Cb
-        RBF_all.append(self._get_rbf(N, C, E_idx))  # N-C
-        RBF_all.append(self._get_rbf(N, O, E_idx))  # N-O
-        RBF_all.append(self._get_rbf(N, Cb, E_idx))  # N-Cb
-        RBF_all.append(self._get_rbf(Cb, C, E_idx))  # Cb-C
-        RBF_all.append(self._get_rbf(Cb, O, E_idx))  # Cb-O
-        RBF_all.append(self._get_rbf(O, C, E_idx))  # O-C
-        RBF_all.append(self._get_rbf(N, Ca, E_idx))  # N-Ca
-        RBF_all.append(self._get_rbf(C, Ca, E_idx))  # C-Ca
-        RBF_all.append(self._get_rbf(O, Ca, E_idx))  # O-Ca
-        RBF_all.append(self._get_rbf(Cb, Ca, E_idx))  # Cb-Ca
-        RBF_all.append(self._get_rbf(C, N, E_idx))  # C-N
-        RBF_all.append(self._get_rbf(O, N, E_idx))  # O-N
-        RBF_all.append(self._get_rbf(Cb, N, E_idx))  # Cb-N
-        RBF_all.append(self._get_rbf(C, Cb, E_idx))  # C-Cb
-        RBF_all.append(self._get_rbf(O, Cb, E_idx))  # O-Cb
-        RBF_all.append(self._get_rbf(C, O, E_idx))  # C-O
+        # Use loop for all pairs
+        for atom1, atom2 in product(atoms_list, repeat=2):
+            RBF_all.append(self._get_rbf(atom1, atom2, E_idx))
+
         RBF_all = torch.cat(tuple(RBF_all), dim=-1)
 
         offset = residue_idx[:, :, None] - residue_idx[:, None, :]
@@ -289,7 +357,7 @@ class ProteinFeatures(nn.Module):
         E = torch.cat((E_positional, RBF_all), -1)
         E = self.edge_embedding(E)
         E = self.norm_edges(E)
-        return E, E_idx
+        return E, E_idx, occupancy, edge_mask
 
 
 class ProteinMPNN(nn.Module):
@@ -307,6 +375,9 @@ class ProteinMPNN(nn.Module):
         k_neighbors=32,
         augment_eps=0.1,
         dropout=0.1,
+        edge_cutoff=None,
+        use_virtual_center=False,
+        occupancy_cutoff=None,
     ):
         """Initialize."""
         super().__init__()
@@ -317,7 +388,13 @@ class ProteinMPNN(nn.Module):
         self.hidden_dim = hidden_dim
 
         self.features = ProteinFeatures(
-            node_features, edge_features, top_k=k_neighbors, augment_eps=augment_eps
+            node_features,
+            edge_features,
+            top_k=k_neighbors,
+            augment_eps=augment_eps,
+            edge_cutoff=edge_cutoff,
+            use_virtual_center=use_virtual_center,
+            occupancy_cutoff=occupancy_cutoff,
         )
 
         self.W_e = nn.Linear(edge_features, hidden_dim, bias=True)
@@ -333,6 +410,15 @@ class ProteinMPNN(nn.Module):
             DecLayer(hidden_dim, hidden_dim * 3, dropout=dropout) for _ in range(num_decoder_layers)
         ])
         self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
+
+        self.occupancy_mlp = None
+        if occupancy_cutoff is not None:
+            self.occupancy_mlp = nn.Sequential(
+                nn.Linear(1, hidden_dim),
+                nn.GELU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.LayerNorm(hidden_dim),
+            )
 
         for p in self.parameters():
             if p.dim() > 1:
@@ -354,7 +440,7 @@ class ProteinMPNN(nn.Module):
         # Prepare node and edge embeddings
         # Checkpoint the expensive feature extraction during training
         if self.training:
-            E, E_idx = torch.utils.checkpoint.checkpoint(
+            E, E_idx, occupancy, edge_mask = torch.utils.checkpoint.checkpoint(
                 self.features,
                 X,
                 mask,
@@ -364,18 +450,25 @@ class ProteinMPNN(nn.Module):
                 use_reentrant=False,
             )
         else:
-            E, E_idx = self.features(
+            E, E_idx, occupancy, edge_mask = self.features(
                 X, mask, residue_idx, chain_encoding_all, backbone_noise=fix_backbone_noise
             )
 
         h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device).to(
             self.W_out.weight.dtype
         )
+
+        if self.occupancy_mlp is not None and occupancy is not None:
+            h_V = h_V + self.occupancy_mlp(occupancy)
+
         h_E = self.W_e(E)
 
         # Encoder is unmasked self-attention
         mask_attend = gather_nodes(mask.unsqueeze(-1), E_idx).squeeze(-1)
         mask_attend = mask.unsqueeze(-1) * mask_attend
+        if edge_mask is not None:
+            mask_attend = mask_attend * edge_mask
+
         for layer in self.encoder_layers:
             h_V, h_E = torch.utils.checkpoint.checkpoint(
                 layer, h_V, h_E, E_idx, mask, mask_attend, use_reentrant=False
@@ -415,6 +508,15 @@ class ProteinMPNN(nn.Module):
         mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
         mask_bw = mask_1D * mask_attend
         mask_fw = mask_1D * (1.0 - mask_attend)
+
+        if edge_mask is not None:
+            # Apply edge_mask to autoregressive masks too?
+            # mask_attend above for encoder was (mask_V_neighbor & edge_mask).
+            # Here mask_attend is "visible based on order".
+            # We should also AND it with edge_mask to respect connectivity.
+            edge_mask_expanded = edge_mask.unsqueeze(-1)
+            mask_bw = mask_bw * edge_mask_expanded
+            mask_fw = mask_fw * edge_mask_expanded
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
         for layer in self.decoder_layers:

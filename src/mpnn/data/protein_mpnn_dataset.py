@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import Dataset
 from torch_geometric.data import (
     Data,
     InMemoryDataset,
@@ -22,16 +23,15 @@ from torch_geometric.data import (
 from tqdm import tqdm
 
 from mpnn.common.constants import AA_ALPHABET
-from mpnn.data.data_utils import entry_to_pyg_data
+from mpnn.data.data_utils import process_pdb
+from mpnn.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class StructureDataset:
-    def __init__(
-        self,
-        pdb_dict_list,
-        max_length=100,
-    ):
-        alphabet_set = set([a for a in AA_ALPHABET])
+    def __init__(self, pdb_dict_list, max_length=100):
+        alphabet_set = set(list(AA_ALPHABET))
         discard_count = {"bad_chars": 0, "too_long": 0, "bad_seq_length": 0}
 
         self.data = []
@@ -42,19 +42,97 @@ class StructureDataset:
             bad_chars = set([s for s in seq]).difference(alphabet_set)
             if len(bad_chars) == 0:
                 if len(entry["seq"]) <= max_length:
-                    self.data.append(entry_to_pyg_data(entry))
+                    self.data.append(entry)
                 else:
                     discard_count["too_long"] += 1
             else:
                 discard_count["bad_chars"] += 1
 
-        print("Discarded: ", discard_count)
+        logger.info("Discarded: %s", discard_count)
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         return self.data[idx]
+
+
+class StructureLoader:
+    def __init__(self, dataset, batch_size=100, shuffle=True, drop_last=False):
+        self.dataset = dataset
+        self.lengths = [len(entry["seq"]) for entry in dataset]
+        self.batch_size = batch_size
+        sorted_ix = np.argsort(self.lengths)
+
+        # Cluster into batches of similar sizes
+        clusters, batch = [], []
+        for ix in sorted_ix:
+            size = self.lengths[ix]
+            if size * (len(batch) + 1) <= self.batch_size:
+                batch.append(ix)
+            else:
+                clusters.append(batch)
+                batch = []
+        if len(batch) > 0:
+            clusters.append(batch)
+        self.clusters = clusters
+
+    def __len__(self):
+        return len(self.clusters)
+
+    def __iter__(self):
+        np.random.shuffle(self.clusters)
+        for b_idx in self.clusters:
+            batch = [self.dataset[i] for i in b_idx]
+            yield batch
+
+
+class PDBDataset(Dataset):
+    def __init__(self, ids, loader, entry_list, params, max_length=10000):
+        self.ids = ids
+        self.entry_list = entry_list
+        self.loader = loader
+        self.params = params
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.ids)
+
+    def __getitem__(self, index):
+        idx = self.ids[index]
+        sel_idx = np.random.randint(0, len(self.entry_list[idx]))
+        out = self.loader(self.entry_list[idx][sel_idx], self.params)
+        if "label" not in out:
+            return None
+        out = process_pdb(out)
+        if not out or len(out["seq"]) > self.max_length:
+            return None
+        return out
+
+
+class PDBDatasetFlattened(Dataset):
+    def __init__(self, ids, loader, entry_list, params, max_length=10000):
+        self.ids = ids
+        self.entry_list = entry_list
+        self.loader = loader
+        self.params = params
+        self.max_length = max_length
+        self.flattened_ids = []
+        for idx in self.ids:
+            for entry in self.entry_list[idx]:
+                self.flattened_ids.append(entry)
+
+    def __len__(self):
+        return len(self.flattened_ids)
+
+    def __getitem__(self, index):
+        out = self.loader(self.flattened_ids[index], self.params)
+        if "label" not in out:
+            return None
+        out = process_pdb(out)
+        if not out or len(out["seq"]) > self.max_length:
+            return None
+        return out
 
 
 class ProteinMPNNDataset(InMemoryDataset):
