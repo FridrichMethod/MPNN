@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn import knn_graph, radius_graph
 from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.utils import to_dense_adj, to_dense_batch
+from torch_geometric.utils import to_dense_batch
 
 
 def build_autoregressive_mask(
@@ -37,8 +37,16 @@ def build_autoregressive_mask(
         permutation_matrix_reverse,
         permutation_matrix_reverse,
     )
-    adj = to_dense_adj(edge_index, batch)
-    mask_attend = order_mask_backward[adj.bool()].unsqueeze(-1)
+    row, col = edge_index
+    edge_batch = batch[row]
+    counts = torch.bincount(batch)
+    ptr = torch.cat([torch.tensor([0], device=device), torch.cumsum(counts, 0)[:-1]])
+
+    start_indices = ptr[edge_batch]
+    row_local = row - start_indices
+    col_local = col - start_indices
+
+    mask_attend = order_mask_backward[edge_batch, row_local, col_local].unsqueeze(-1)
 
     return mask_attend
 
