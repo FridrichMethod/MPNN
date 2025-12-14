@@ -4,14 +4,16 @@
 #SBATCH --error=train_sweep_%A_%a.err
 #SBATCH --time=2-00:00:00
 #SBATCH --partition=btrippe,stat,bioe,owners,possu,gpu
-#SBATCH --gres=gpu:1
-#SBATCH --constraint=gpu_mem:80GB
+#SBATCH --gpus=1
+#SBATCH --constraint="GPU_MEM:80GB"
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --array=0-7
 
 # Define parameter arrays
-EDGE_CUTOFFS=(10.0 15.0)
+# EDGE_CUTOFFS: 15.0 or None (represented as empty string or specific placeholder to handle in bash)
+# Bash array can hold strings. Let's use "15.0" and "None"
+EDGE_CUTOFFS=("15.0" "None")
 USE_VIRTUAL_CENTERS=(false true)
 OCCUPANCY_CUTOFFS=(6.0 9.0)
 
@@ -39,7 +41,16 @@ else
     VC_NAME="novc"
 fi
 
-RUN_NAME="mpnn_edge${EDGE_CUTOFF}_${VC_NAME}_occ${OCCUPANCY_CUTOFF}"
+# Handle None for edge cutoff
+if [ "$EDGE_CUTOFF" == "None" ]; then
+    EDGE_FLAG=""
+    EDGE_NAME="none"
+else
+    EDGE_FLAG="--edge_cutoff ${EDGE_CUTOFF}"
+    EDGE_NAME="${EDGE_CUTOFF}"
+fi
+
+RUN_NAME="mpnn_edge${EDGE_NAME}_${VC_NAME}_occ${OCCUPANCY_CUTOFF}"
 
 echo "Running task ${SLURM_ARRAY_TASK_ID}: Edge=${EDGE_CUTOFF}, VC=${VC_FLAG}, Occ=${OCCUPANCY_CUTOFF}"
 echo "Run name: ${RUN_NAME}"
@@ -56,13 +67,13 @@ python -m mpnn.train \
     --num_encoder_layers 3 \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
-    --edge_cutoff "${EDGE_CUTOFF}" \
+    "${EDGE_FLAG}" \
     ${VC_FLAG} \
     --occupancy_cutoff "${OCCUPANCY_CUTOFF}" \
     --backbone_noise 0.2 \
     --max_protein_length 10000 \
     --rescut 3.5 \
-    --num_workers 8 \
+    --num_workers 6 \
     --batch_size 10000 \
     --num_epochs 200 \
     --learning_rate 3e-3 \

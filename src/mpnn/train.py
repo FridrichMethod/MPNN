@@ -379,8 +379,8 @@ def train(args):  # noqa: C901
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
                 batch_data = batch.to(device)  # type: ignore
-                mask_for_loss = (batch_data.mask * batch_data.chain_mask_all).unsqueeze(0)
-                S = batch_data.chain_seq_label.unsqueeze(0)
+                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
+                S = batch_data.chain_seq_label
 
                 with torch.autocast(
                     device_type="cuda", dtype=torch.bfloat16, enabled=args.mixed_precision
@@ -394,8 +394,7 @@ def train(args):  # noqa: C901
                         batch_data.chain_encoding_all,
                         batch_data.batch,
                     )
-                    log_probs_3d = log_probs.unsqueeze(0)
-                    _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
+                    _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
                 loss_av_smoothed.backward()
 
@@ -405,7 +404,7 @@ def train(args):  # noqa: C901
                 optimizer.step()
                 scheduler.step()
 
-                loss, _, true_false = loss_nll(S, log_probs_3d, mask_for_loss)
+                loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
 
                 train_sum += torch.sum(loss * mask_for_loss).float().cpu().data.numpy()
                 train_acc += torch.sum(true_false * mask_for_loss).float().cpu().data.numpy()
@@ -462,8 +461,8 @@ def train(args):  # noqa: C901
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
                 batch_data = batch.to(device)  # type: ignore
-                S = batch_data.chain_seq_label.unsqueeze(0)
-                mask_for_loss = (batch_data.mask * batch_data.chain_mask_all).unsqueeze(0)
+                S = batch_data.chain_seq_label
+                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
                 with torch.inference_mode():
                     log_probs = model(
                         batch_data.x,
@@ -474,10 +473,9 @@ def train(args):  # noqa: C901
                         batch_data.chain_encoding_all,
                         batch_data.batch,
                     )
-                    log_probs_3d = log_probs.unsqueeze(0)
-                    _, loss_av_smoothed = loss_smoothed(S, log_probs_3d, mask_for_loss)
+                    _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
-                loss, _, true_false = loss_nll(S, log_probs_3d, mask_for_loss)
+                loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
 
                 validation_sum += torch.sum(loss * mask_for_loss).float().cpu().data.numpy()
                 validation_acc += torch.sum(true_false * mask_for_loss).float().cpu().data.numpy()
@@ -703,7 +701,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--reload_data_every_n_epochs",
         type=int,
-        default=5,
+        default=10,
         help="reload training data every n epochs",
     )
     argparser.add_argument("--code_version", type=str, default="nov20", help="code version")

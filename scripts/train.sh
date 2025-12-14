@@ -1,20 +1,19 @@
 #!/bin/bash
 
 python -m mpnn.train \
+    --path_for_training_data ./datasets/train/pdb_2021aug02_sample \
     --optimizer adamw \
     --scheduler cosine \
     --hidden_dim 128 \
     --num_encoder_layers 3 \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
-    --edge_cutoff 15 \
     --backbone_noise 0.2 \
-    --use_virtual_center \
     --max_protein_length 10000 \
     --rescut 3.5 \
-    --num_workers 8 \
+    --num_workers 6 \
     --batch_size 2000 \
-    --num_epochs 20 \
+    --num_epochs 200 \
     --learning_rate 3e-3 \
     --weight_decay 1e-2 \
     --gradient_norm 1.0 \
@@ -24,4 +23,5 @@ python -m mpnn.train \
     --force_rerun \
     --wandb \
     --wandb_project mpnn-features \
-    --wandb_entity stanford-protein
+    --wandb_entity stanford-protein \
+    --run_name baseline
