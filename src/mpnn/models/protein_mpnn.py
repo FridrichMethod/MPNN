@@ -46,7 +46,7 @@ def build_autoregressive_mask(
     row_local = row - start_indices
     col_local = col - start_indices
 
-    mask_attend = order_mask_backward[edge_batch, row_local, col_local].unsqueeze(-1)
+    mask_attend = order_mask_backward[edge_batch, col_local, row_local].unsqueeze(-1)
 
     return mask_attend
 
