@@ -91,6 +91,7 @@ python -m mpnn.train \
     --dropout 0.1 \
     --exclude_membrane \
     --mixed_precision \
+    --force_rerun \
     --wandb \
     --wandb_project mpnn-features-sweep \
     --wandb_entity stanford-protein \
