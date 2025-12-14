@@ -15,7 +15,7 @@
 # Bash array can hold strings. Let's use "15.0" and "None"
 EDGE_CUTOFFS=("15.0" "None")
 USE_VIRTUAL_CENTERS=(false true)
-OCCUPANCY_CUTOFFS=(6.0 9.0)
+OCCUPANCY_CUTOFFS=("6.0" "None")
 
 # Calculate indices for the current task
 # Total combinations = 2 * 2 * 2 = 8
@@ -50,7 +50,16 @@ else
     EDGE_NAME="${EDGE_CUTOFF}"
 fi
 
-RUN_NAME="mpnn_edge${EDGE_NAME}_${VC_NAME}_occ${OCCUPANCY_CUTOFF}"
+# Handle None for occupancy cutoff
+if [ "$OCCUPANCY_CUTOFF" == "None" ]; then
+    OCCUPANCY_FLAG=""
+    OCCUPANCY_NAME="none"
+else
+    OCCUPANCY_FLAG="--occupancy_cutoff ${OCCUPANCY_CUTOFF}"
+    OCCUPANCY_NAME="${OCCUPANCY_CUTOFF}"
+fi
+
+RUN_NAME="mpnn_edge${EDGE_NAME}_${VC_NAME}_occ${OCCUPANCY_NAME}"
 
 echo "Running task ${SLURM_ARRAY_TASK_ID}: Edge=${EDGE_CUTOFF}, VC=${VC_FLAG}, Occ=${OCCUPANCY_CUTOFF}"
 echo "Run name: ${RUN_NAME}"
@@ -68,14 +77,14 @@ python -m mpnn.train \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
     "${EDGE_FLAG}" \
-    ${VC_FLAG} \
-    --occupancy_cutoff "${OCCUPANCY_CUTOFF}" \
+    "${VC_FLAG}" \
+    "${OCCUPANCY_FLAG}" \
     --backbone_noise 0.2 \
     --max_protein_length 10000 \
     --rescut 3.5 \
     --num_workers 6 \
     --batch_size 10000 \
-    --num_epochs 200 \
+    --num_epochs 100 \
     --learning_rate 3e-3 \
     --weight_decay 1e-2 \
     --gradient_norm 1.0 \

@@ -9,6 +9,9 @@ python -m mpnn.train \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
     --backbone_noise 0.2 \
+    --edge_cutoff 15.0 \
+    --use_virtual_center \
+    --occupancy_cutoff 6.0 \
     --max_protein_length 10000 \
     --rescut 3.5 \
     --num_workers 6 \
