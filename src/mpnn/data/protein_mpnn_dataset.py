@@ -6,11 +6,10 @@ from collections.abc import Callable, Iterable, Sequence
 from itertools import chain
 
 import numpy as np
-from torch.utils.data import Dataset, Sampler
-from torch_geometric.loader import DataLoader
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 from mpnn.common.constants import AA_ALPHABET
-from mpnn.data.data_utils import entry_to_pyg_data, process_pdb
+from mpnn.data.data_utils import featurize, process_pdb
 from mpnn.utils import get_logger
 
 logger = get_logger(__name__)
@@ -87,7 +86,7 @@ class StructureDataset(Dataset):
             if len(bad_chars) == 0:
                 if len(entry["seq"]) <= max_length:
                     self.lengths.append(len(entry["seq"]))
-                    self.data.append(entry_to_pyg_data(entry))
+                    self.data.append(entry)
                 else:
                     discard_count["too_long"] += 1
             else:
@@ -172,5 +171,6 @@ class StructureLoader(DataLoader):
             sampler=None,
             batch_sampler=batch_sampler,
             drop_last=False,
+            collate_fn=featurize,
             **dataloader_kwargs,
         )

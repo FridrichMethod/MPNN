@@ -41,7 +41,8 @@ from mpnn.env import (
     TRAIN_DATA_PATH,
 )
 from mpnn.finetune import validation_step
-from mpnn.models import EnergyMPNN, ProteinMPNN
+from mpnn.models import EnergyMPNN
+from mpnn.models.model_utils import ProteinMPNN
 from mpnn.typing_utils import StrPath
 from mpnn.utils import enable_tf32_if_available, get_logger
 
@@ -204,15 +205,14 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 def get_model_and_optimizer(args, device: Device, total_steps):
     """Get model and optimizer."""
     model = ProteinMPNN(
+        node_features=args.hidden_dim,
+        edge_features=args.hidden_dim,
         hidden_dim=args.hidden_dim,
         num_encoder_layers=args.num_encoder_layers,
         num_decoder_layers=args.num_encoder_layers,
-        num_neighbors=args.num_neighbors,
-        edge_cutoff=args.edge_cutoff,
+        k_neighbors=args.num_neighbors,
         dropout=args.dropout,
         augment_eps=args.backbone_noise,
-        use_virtual_center=args.use_virtual_center,
-        occupancy_cutoff=args.occupancy_cutoff,
     )
     model.to(device)
 
@@ -378,22 +378,27 @@ def train(args):  # noqa: C901
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                batch_data = batch.to(device)  # type: ignore
-                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
-                S = batch_data.chain_seq_label
+                X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = batch
+                X = X.to(device)
+                S = S.to(device)
+                mask = mask.to(device)
+                chain_M = chain_M.to(device)
+                residue_idx = residue_idx.to(device)
+                chain_encoding_all = chain_encoding_all.to(device)
+                mask_for_loss = mask * chain_M
 
                 with torch.autocast(
                     device_type="cuda", dtype=torch.bfloat16, enabled=args.mixed_precision
                 ):
                     log_probs = model(
-                        batch_data.x,
-                        batch_data.chain_seq_label,
-                        batch_data.mask,
-                        batch_data.chain_mask_all,
-                        batch_data.residue_idx,
-                        batch_data.chain_encoding_all,
-                        batch_data.batch,
+                        X,
+                        S,
+                        mask,
+                        chain_M,
+                        residue_idx,
+                        chain_encoding_all,
                     )
+                    # log_probs_3d = log_probs.unsqueeze(0)
                     _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
                 loss_av_smoothed.backward()
@@ -460,18 +465,22 @@ def train(args):  # noqa: C901
             for _, batch in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                batch_data = batch.to(device)  # type: ignore
-                S = batch_data.chain_seq_label
-                mask_for_loss = batch_data.mask * batch_data.chain_mask_all
+                X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = batch
+                X = X.to(device)
+                S = S.to(device)
+                mask = mask.to(device)
+                chain_M = chain_M.to(device)
+                residue_idx = residue_idx.to(device)
+                chain_encoding_all = chain_encoding_all.to(device)
+                mask_for_loss = mask * chain_M
                 with torch.inference_mode():
                     log_probs = model(
-                        batch_data.x,
-                        batch_data.chain_seq_label,
-                        batch_data.mask,
-                        batch_data.chain_mask_all,
-                        batch_data.residue_idx,
-                        batch_data.chain_encoding_all,
-                        batch_data.batch,
+                        X,
+                        S,
+                        mask,
+                        chain_M,
+                        residue_idx,
+                        chain_encoding_all,
                     )
                     _, loss_av_smoothed = loss_smoothed(S, log_probs, mask_for_loss)
 
@@ -758,22 +767,22 @@ if __name__ == "__main__":
         help="path for FSD thermo cache",
     )
 
-    argparser.add_argument(
-        "--edge_cutoff",
-        type=float,
-        default=None,
-        help="cutoff distance for radius graph (if None, use k-nn)",
-    )
-    argparser.add_argument(
-        "--use_virtual_center",
-        action="store_true",
-        help="use virtual center in edge features",
-    )
-    argparser.add_argument(
-        "--occupancy_cutoff",
-        type=float,
-        default=None,
-        help="cutoff distance for occupancy features (if None, do not use occupancy)",
-    )
+    # argparser.add_argument(
+    #     "--edge_cutoff",
+    #     type=float,
+    #     default=None,
+    #     help="cutoff distance for radius graph (if None, use k-nn)",
+    # )
+    # argparser.add_argument(
+    #     "--use_virtual_center",
+    #     action="store_true",
+    #     help="use virtual center in edge features",
+    # )
+    # argparser.add_argument(
+    #     "--occupancy_cutoff",
+    #     type=float,
+    #     default=None,
+    #     help="cutoff distance for occupancy features (if None, do not use occupancy)",
+    # )
     args = argparser.parse_args()
     train(args)
