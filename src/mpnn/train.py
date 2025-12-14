@@ -13,22 +13,14 @@ import wandb
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.types import Device
-from torch.utils.data import DataLoader
 from torch_geometric import seed_everything
 from tqdm.auto import tqdm
 
 from mpnn.data import (
     MegascaleDataset,
-    PDBDataset,
-    StructureDataset,
-    StructureLoader,
     ThermoMutDBDataset,
 )
-from mpnn.data.data_utils import (
-    build_training_clusters,
-    loader_pdb,
-)
-from mpnn.data.protein_mpnn_dataset import LengthBatchSampler
+from mpnn.data.data_utils import featurize
 from mpnn.env import (
     DEFAULT_TRAIN_OUTPUT_DIR,
     EXCLUDED_PDB_CSV,
@@ -42,7 +34,17 @@ from mpnn.env import (
 )
 from mpnn.finetune import validation_step
 from mpnn.models import EnergyMPNN
-from mpnn.models.model_utils import ProteinMPNN
+
+# from mpnn.data.protein_mpnn_dataset import LengthBatchSampler
+from mpnn.models.model_utils import (
+    PDBDataset,
+    PDBDatasetFlattened,
+    ProteinMPNN,
+    StructureDataset,
+    StructureLoader,
+    build_training_clusters,
+    loader_pdb,
+)
 from mpnn.typing_utils import StrPath
 from mpnn.utils import enable_tf32_if_available, get_logger
 
@@ -148,11 +150,27 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
 
     train_clusters = PDBDataset(list(train.keys()), loader_pdb, train, params)
     logger.info("number of training clusters: %s", len(train_clusters))
-    train_cluster_loader = DataLoader(train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+    # train_cluster_loader = DataLoader(train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+    # train_cluster_loader = torch.utils.data.DataLoader(
+    #     train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
+    # )
+    # USE StructureLoader from model_utils for clusters? No, model_utils StructureLoader is for batching.
+    # The original code used a standard DataLoader for clusters.
+    # But wait, PDBDataset in model_utils inherits from torch.utils.data.Dataset.
+    # LOAD_PARAM has 'collate_fn': collate_passthrough_filter.
 
-    valid_clusters = PDBDataset(list(valid.keys()), loader_pdb, valid, params, flattened=True)
+    # We should use standard DataLoader for the CLUSTER loading part, as per original train.py logic
+    # BUT, we need to make sure we are not using the StructureLoader for THIS part if it was not intended.
+    train_cluster_loader = torch.utils.data.DataLoader(
+        train_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
+    )
+
+    valid_clusters = PDBDatasetFlattened(list(valid.keys()), loader_pdb, valid, params)
     logger.info("number of validation clusters: %s", len(valid_clusters))
-    valid_cluster_loader = DataLoader(valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+    # valid_cluster_loader = DataLoader(valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+    valid_cluster_loader = torch.utils.data.DataLoader(
+        valid_clusters, worker_init_fn=worker_init_fn, **LOAD_PARAM
+    )
 
     pdb_dict_train = []
     skipped_excluded = 0
@@ -183,20 +201,13 @@ def load_pdb_data(data_path: StrPath, args: argparse.Namespace):
     pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
     pdb_dataset_valid = StructureDataset(pdb_dict_valid, max_length=args.max_protein_length)
 
-    batch_sampler_train = LengthBatchSampler(
-        pdb_dataset_train.lengths, batch_size=args.batch_size, shuffle=True, drop_last=False
-    )
-    batch_sampler_valid = LengthBatchSampler(
-        pdb_dataset_valid.lengths, batch_size=args.batch_size, shuffle=True, drop_last=False
-    )
-
     pdb_loader_train = StructureLoader(
         pdb_dataset_train,
-        batch_sampler=batch_sampler_train,
+        batch_size=args.batch_size,
     )
     pdb_loader_valid = StructureLoader(
         pdb_dataset_valid,
-        batch_sampler=batch_sampler_valid,
+        batch_size=args.batch_size,
     )
 
     return pdb_loader_train, pdb_loader_valid, train_cluster_loader, excluded_pdbs
@@ -378,13 +389,18 @@ def train(args):  # noqa: C901
             try:
                 model.train()
                 optimizer.zero_grad(set_to_none=True)
-                X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = batch
-                X = X.to(device)
-                S = S.to(device)
-                mask = mask.to(device)
-                chain_M = chain_M.to(device)
-                residue_idx = residue_idx.to(device)
-                chain_encoding_all = chain_encoding_all.to(device)
+                # batch is a list of dicts from StructureLoader
+                X, S, mask, chain_M, residue_idx, chain_encoding_all = featurize(
+                    batch, device=device
+                )
+
+                # X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = batch
+                # X = X.to(device)
+                # S = S.to(device)
+                # mask = mask.to(device)
+                # chain_M = chain_M.to(device)
+                # residue_idx = residue_idx.to(device)
+                # chain_encoding_all = chain_encoding_all.to(device)
                 mask_for_loss = mask * chain_M
 
                 with torch.autocast(
@@ -465,13 +481,9 @@ def train(args):  # noqa: C901
             for _, batch in tqdm(
                 enumerate(pdb_loader_valid), total=len(pdb_loader_valid), desc="Validation Batch"
             ):
-                X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = batch
-                X = X.to(device)
-                S = S.to(device)
-                mask = mask.to(device)
-                chain_M = chain_M.to(device)
-                residue_idx = residue_idx.to(device)
-                chain_encoding_all = chain_encoding_all.to(device)
+                X, S, mask, chain_M, residue_idx, chain_encoding_all = featurize(
+                    batch, device=device
+                )
                 mask_for_loss = mask * chain_M
                 with torch.inference_mode():
                     log_probs = model(
@@ -610,13 +622,18 @@ def train(args):  # noqa: C901
                 pdb_dict_train.append(x)
             logger.info("Skipped %s excluded PDBs", skipped_excluded)
             pdb_dataset_train = StructureDataset(pdb_dict_train, max_length=args.max_protein_length)
-            batch_sampler_train = LengthBatchSampler(
-                pdb_dataset_train.lengths,
+            # batch_sampler_train = LengthBatchSampler(
+            #     pdb_dataset_train.lengths,
+            #     batch_size=args.batch_size,
+            #     shuffle=True,
+            #     drop_last=False,
+            # )
+            # pdb_loader_train = StructureLoader(pdb_dataset_train, batch_sampler=batch_sampler_train)
+            pdb_loader_train = StructureLoader(
+                pdb_dataset_train,
                 batch_size=args.batch_size,
-                shuffle=True,
-                drop_last=False,
+                collate_fn=featurize,
             )
-            pdb_loader_train = StructureLoader(pdb_dataset_train, batch_sampler=batch_sampler_train)
 
         if epoch_idx == args.num_epochs - 1:
             logger.info("Training complete. Saving model weights...")

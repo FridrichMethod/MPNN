@@ -180,7 +180,9 @@ def featurize(batch, device: Device = None):  # noqa: C901
     chain_M = torch.from_numpy(chain_M).to(dtype=torch.float, device=device)
     chain_encoding_all = torch.from_numpy(chain_encoding_all).to(dtype=torch.long, device=device)
 
-    return X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all
+    # NOTE: The "old" featurize likely didn't return mask_self and lengths if it was returning 6 values.
+    # But let's check train.py to see what it unpacks.
+    return X, S, mask, chain_M, residue_idx, chain_encoding_all
 
 
 def entry_to_pyg_data(entry: dict) -> Data:
