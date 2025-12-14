@@ -77,7 +77,7 @@ python -m mpnn.train \
     --num_decoder_layers 3 \
     --num_neighbors 48 \
     "${EDGE_FLAG}" \
-    "${VC_FLAG}" \
+    ${VC_FLAG} \
     "${OCCUPANCY_FLAG}" \
     --backbone_noise 0.2 \
     --max_protein_length 10000 \
